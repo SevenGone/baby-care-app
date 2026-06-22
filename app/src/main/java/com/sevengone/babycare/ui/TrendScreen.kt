@@ -4,11 +4,11 @@ import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.FilterChip
@@ -29,22 +29,23 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.sevengone.babycare.data.MeasurementMethod
 import com.sevengone.babycare.data.MedicineRecord
 import com.sevengone.babycare.data.TemperatureRecord
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun TrendScreen(
     viewModel: BabyCareViewModel,
     contentPadding: PaddingValues
 ) {
     var selectedMethod by rememberSaveable { mutableStateOf(MeasurementMethod.Ear) }
-    val targetDate = LocalDate.of(2026, 6, 22)
+    val targetDate = viewModel.focusDate()
     val records = viewModel.temperatureRecords
         .filter { it.measuredAt.toLocalDate() == targetDate && it.method == selectedMethod }
         .sortedBy { it.measuredAt }
@@ -67,9 +68,10 @@ fun TrendScreen(
                     title = "体温趋势",
                     subtitle = "体温折线 + 正常范围带 + 给药时间点标记"
                 )
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     MeasurementMethod.entries.forEach { method ->
                         FilterChip(
@@ -96,7 +98,7 @@ fun TrendScreen(
             GlassCard {
                 SectionHeader(
                     title = "给药点位",
-                    subtitle = "图上有标记，列表里再补充一次细节"
+                    subtitle = "图上做时间标记，列表只保留必要细节"
                 )
             }
         }
@@ -122,16 +124,18 @@ fun TrendScreen(
 }
 
 @Composable
-private fun TemperatureChart(
+fun TemperatureChart(
     records: List<TemperatureRecord>,
     medicineRecords: List<MedicineRecord>,
-    selectedMethod: MeasurementMethod
+    selectedMethod: MeasurementMethod,
+    chartHeight: Dp = 300.dp,
+    showMedicineLabels: Boolean = true
 ) {
     if (records.isEmpty()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp)
+                .height(chartHeight)
         ) {
             Text(
                 text = "当前测量方式下还没有记录。",
@@ -151,14 +155,14 @@ private fun TemperatureChart(
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
-            .height(300.dp)
+            .height(chartHeight)
     ) {
         val leftPadding = 72.dp.toPx()
-        val rightPadding = 26.dp.toPx()
+        val rightPadding = 24.dp.toPx()
         val topPadding = 28.dp.toPx()
-        val bottomPadding = 50.dp.toPx()
+        val bottomPadding = 38.dp.toPx()
         val chartWidth = size.width - leftPadding - rightPadding
-        val chartHeight = size.height - topPadding - bottomPadding
+        val plotHeight = size.height - topPadding - bottomPadding
 
         val minTemp = 36f
         val maxTemp = 39.2f
@@ -173,7 +177,7 @@ private fun TemperatureChart(
 
         fun mapY(value: Float): Float {
             val ratio = (value - minTemp) / (maxTemp - minTemp)
-            return topPadding + chartHeight - (ratio * chartHeight)
+            return topPadding + plotHeight - (ratio * plotHeight)
         }
 
         drawRoundRect(
@@ -188,6 +192,28 @@ private fun TemperatureChart(
             ),
             cornerRadius = CornerRadius(18.dp.toPx(), 18.dp.toPx())
         )
+
+        val xAxisMinutes = listOf(0L, 6 * 60L, 12 * 60L, 18 * 60L, 24 * 60L)
+        xAxisMinutes.forEach { minute ->
+            val tickTime = dayStart.plusMinutes(minute.coerceAtMost(23 * 60L + 59))
+            val x = if (minute >= 24 * 60L) leftPadding + chartWidth else mapX(tickTime)
+            drawLine(
+                color = gridColor,
+                start = Offset(x, topPadding),
+                end = Offset(x, size.height - bottomPadding),
+                strokeWidth = 1.5f
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                if (minute >= 24 * 60L) "24:00" else tickTime.format(DateTimeFormatter.ofPattern("HH:mm")),
+                x - 22.dp.toPx(),
+                size.height - 10.dp.toPx(),
+                Paint().apply {
+                    color = textColor.toArgbCompat()
+                    textSize = 11.dp.toPx()
+                    isAntiAlias = true
+                }
+            )
+        }
 
         yValues.forEach { temp ->
             val y = mapY(temp)
@@ -213,11 +239,7 @@ private fun TemperatureChart(
         val path = Path()
         records.forEachIndexed { index, record ->
             val point = Offset(mapX(record.measuredAt), mapY(record.temperatureCelsius))
-            if (index == 0) {
-                path.moveTo(point.x, point.y)
-            } else {
-                path.lineTo(point.x, point.y)
-            }
+            if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
         }
 
         drawPath(
@@ -233,7 +255,6 @@ private fun TemperatureChart(
             drawCircle(color = lineColor, radius = 4.dp.toPx(), center = center)
         }
 
-        // 先把给药点位按时间映射到同一条时间轴上，便于观察给药前后体温变化。
         medicineRecords.forEach { medicine ->
             val markerX = mapX(medicine.takenAt)
             drawLine(
@@ -251,34 +272,21 @@ private fun TemperatureChart(
                 lineTo(diamondCenter.x - 10.dp.toPx(), diamondCenter.y)
                 close()
             }
-            drawPath(
-                path = diamondPath,
-                color = primaryColor
-            )
-            drawContext.canvas.nativeCanvas.drawText(
-                medicine.medicineName,
-                markerX - 44.dp.toPx(),
-                topPadding + 16.dp.toPx(),
-                Paint().apply {
-                    color = primaryColor.toArgbCompat()
-                    textSize = 11.dp.toPx()
-                    isAntiAlias = true
-                    isFakeBoldText = true
-                }
-            )
-        }
+            drawPath(path = diamondPath, color = primaryColor)
 
-        records.forEach { record ->
-            drawContext.canvas.nativeCanvas.drawText(
-                record.measuredAt.format(DateTimeFormatter.ofPattern("HH:mm")),
-                mapX(record.measuredAt) - 16.dp.toPx(),
-                size.height - 12.dp.toPx(),
-                Paint().apply {
-                    color = textColor.toArgbCompat()
-                    textSize = 12.dp.toPx()
-                    isAntiAlias = true
-                }
-            )
+            if (showMedicineLabels) {
+                drawContext.canvas.nativeCanvas.drawText(
+                    "药",
+                    markerX - 5.dp.toPx(),
+                    topPadding + 16.dp.toPx(),
+                    Paint().apply {
+                        color = primaryColor.toArgbCompat()
+                        textSize = 11.dp.toPx()
+                        isAntiAlias = true
+                        isFakeBoldText = true
+                    }
+                )
+            }
         }
     }
 }

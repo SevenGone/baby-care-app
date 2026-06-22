@@ -2,13 +2,12 @@ package com.sevengone.babycare.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -46,7 +45,13 @@ import com.sevengone.babycare.data.MedicineRecord
 import com.sevengone.babycare.data.TemperatureRecord
 import com.sevengone.babycare.data.TimelineEvent
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+
+private val recordDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+private val recordTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val timelineFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("MM-dd HH:mm")
 
 private sealed interface RecordSheetState {
     data object NewTemperature : RecordSheetState
@@ -61,9 +66,8 @@ fun RecordScreen(
     contentPadding: PaddingValues,
     onSaved: (String) -> Unit
 ) {
-    val targetDate = LocalDate.now()
-    val recentTimeline = viewModel.timelineFor(targetDate).take(8)
-
+    val targetDate = viewModel.focusDate()
+    val recentTimeline = viewModel.timelineFor(targetDate).take(10)
     var sheetState by remember { mutableStateOf<RecordSheetState?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -84,40 +88,74 @@ fun RecordScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "把新增入口做成大按钮，点一下就从底部弹出表单。这样更像正式 app，也更适合单手快速记录。",
+                        text = "体温和给药都支持直接录入具体日期时间，补记和修正会更方便。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        QuickEntryCard(
-                            title = "记录体温",
-                            subtitle = "数值、方式、状态",
-                            icon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.Thermostat,
-                                    contentDescription = "记录体温",
-                                    modifier = Modifier.size(22.dp)
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        val compact = maxWidth < 420.dp
+                        if (compact) {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                QuickEntryCard(
+                                    title = "记录体温",
+                                    subtitle = "数值、方式、状态、时间",
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Thermostat,
+                                            contentDescription = "记录体温",
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = { sheetState = RecordSheetState.NewTemperature }
                                 )
-                            },
-                            modifier = Modifier.weight(1f),
-                            onClick = { sheetState = RecordSheetState.NewTemperature }
-                        )
-                        QuickEntryCard(
-                            title = "记录给药",
-                            subtitle = "药名、剂量、提醒",
-                            icon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.MedicalServices,
-                                    contentDescription = "记录给药",
-                                    modifier = Modifier.size(22.dp)
+                                QuickEntryCard(
+                                    title = "记录给药",
+                                    subtitle = "药名、剂量、原因、时间",
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Rounded.MedicalServices,
+                                            contentDescription = "记录给药",
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = { sheetState = RecordSheetState.NewMedicine }
                                 )
-                            },
-                            modifier = Modifier.weight(1f),
-                            onClick = { sheetState = RecordSheetState.NewMedicine }
-                        )
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                QuickEntryCard(
+                                    title = "记录体温",
+                                    subtitle = "数值、方式、状态、时间",
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Thermostat,
+                                            contentDescription = "记录体温",
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { sheetState = RecordSheetState.NewTemperature }
+                                )
+                                QuickEntryCard(
+                                    title = "记录给药",
+                                    subtitle = "药名、剂量、原因、时间",
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Rounded.MedicalServices,
+                                            contentDescription = "记录给药",
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { sheetState = RecordSheetState.NewMedicine }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -126,10 +164,10 @@ fun RecordScreen(
                 GlassCard {
                     SectionHeader(
                         title = "最近记录",
-                        subtitle = "支持直接编辑和删除，不用来回切页面"
+                        subtitle = "${targetDate.format(DateTimeFormatter.ofPattern("M 月 d 日"))} · 支持编辑和删除"
                     )
                     Text(
-                        text = "删除给药记录时，会一起取消这条记录关联的提醒，避免记录没了但通知还在。",
+                        text = "编辑时可以直接修改记录时间。删除给药记录时，会一起取消这条记录关联的提醒。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -142,7 +180,7 @@ fun RecordScreen(
                         title = "${event.record.temperatureCelsius}°C · ${event.record.method.label}",
                         subtitle = event.record.mood,
                         note = event.record.note,
-                        time = event.record.measuredAt.format(DateTimeFormatter.ofPattern("MM-dd HH:mm")),
+                        time = event.record.measuredAt.format(timelineFormatter),
                         tag = "体温",
                         onEdit = { sheetState = RecordSheetState.EditTemperature(event.record) },
                         onDelete = {
@@ -155,7 +193,7 @@ fun RecordScreen(
                         title = event.record.medicineName,
                         subtitle = "${event.record.dosage} · ${event.record.reason}",
                         note = event.record.note,
-                        time = event.record.takenAt.format(DateTimeFormatter.ofPattern("MM-dd HH:mm")),
+                        time = event.record.takenAt.format(timelineFormatter),
                         tag = "给药",
                         onEdit = { sheetState = RecordSheetState.EditMedicine(event.record) },
                         onDelete = {
@@ -175,13 +213,15 @@ fun RecordScreen(
                     title = "新增体温记录",
                     submitLabel = "保存体温记录",
                     initialMethod = MeasurementMethod.Ear,
+                    initialMeasuredAt = LocalDateTime.now(),
                     onDismiss = { sheetState = null },
-                    onSubmit = { value, method, mood, note ->
+                    onSubmit = { value, method, mood, note, measuredAt ->
                         viewModel.addTemperatureRecord(
                             value = value,
                             method = method,
                             note = note,
-                            mood = mood
+                            mood = mood,
+                            measuredAt = measuredAt
                         )
                         sheetState = null
                         onSaved("体温记录已保存")
@@ -194,13 +234,15 @@ fun RecordScreen(
                     title = "新增给药记录",
                     submitLabel = "保存给药记录",
                     reminderPreview = buildReminderPreview(viewModel),
+                    initialTakenAt = LocalDateTime.now(),
                     onDismiss = { sheetState = null },
-                    onSubmit = { name, dosage, reason, note ->
+                    onSubmit = { name, dosage, reason, note, takenAt ->
                         viewModel.addMedicineRecord(
                             medicineName = name,
                             dosage = dosage,
                             reason = reason,
-                            note = note
+                            note = note,
+                            takenAt = takenAt
                         )
                         sheetState = null
                         onSaved("给药记录已保存，并已按设置安排提醒")
@@ -216,15 +258,16 @@ fun RecordScreen(
                     initialMethod = currentSheet.record.method,
                     initialMood = currentSheet.record.mood,
                     initialNote = currentSheet.record.note,
+                    initialMeasuredAt = currentSheet.record.measuredAt,
                     onDismiss = { sheetState = null },
-                    onSubmit = { value, method, mood, note ->
+                    onSubmit = { value, method, mood, note, measuredAt ->
                         viewModel.updateTemperatureRecord(
                             id = currentSheet.record.id,
                             value = value,
                             method = method,
                             note = note,
                             mood = mood,
-                            measuredAt = currentSheet.record.measuredAt
+                            measuredAt = measuredAt
                         )
                         sheetState = null
                         onSaved("体温记录已更新")
@@ -240,16 +283,17 @@ fun RecordScreen(
                     initialDosage = currentSheet.record.dosage,
                     initialReason = currentSheet.record.reason,
                     initialNote = currentSheet.record.note,
+                    initialTakenAt = currentSheet.record.takenAt,
                     reminderPreview = "保存后会按当前提醒设置重新安排这条给药记录的后续提醒。",
                     onDismiss = { sheetState = null },
-                    onSubmit = { name, dosage, reason, note ->
+                    onSubmit = { name, dosage, reason, note, takenAt ->
                         viewModel.updateMedicineRecord(
                             id = currentSheet.record.id,
                             medicineName = name,
                             dosage = dosage,
                             reason = reason,
                             note = note,
-                            takenAt = currentSheet.record.takenAt
+                            takenAt = takenAt
                         )
                         sheetState = null
                         onSaved("给药记录已更新，关联提醒已重排")
@@ -272,9 +316,7 @@ private fun QuickEntryCard(
         modifier = modifier,
         paddingValues = PaddingValues(16.dp)
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
             icon()
         }
         Text(
@@ -331,31 +373,61 @@ private fun EditableTimelineCard(
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            OutlinedButton(
-                modifier = Modifier.weight(1f),
-                onClick = onEdit
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Edit,
-                    contentDescription = "编辑",
-                    modifier = Modifier.size(18.dp)
-                )
-                Text("编辑")
-            }
-            OutlinedButton(
-                modifier = Modifier.weight(1f),
-                onClick = onDelete
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Delete,
-                    contentDescription = "删除",
-                    modifier = Modifier.size(18.dp)
-                )
-                Text("删除")
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val compact = maxWidth < 420.dp
+            if (compact) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onEdit
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = "编辑",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text("编辑")
+                    }
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onDelete
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Delete,
+                            contentDescription = "删除",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text("删除")
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        modifier = Modifier.weight(1f),
+                        onClick = onEdit
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = "编辑",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text("编辑")
+                    }
+                    OutlinedButton(
+                        modifier = Modifier.weight(1f),
+                        onClick = onDelete
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Delete,
+                            contentDescription = "删除",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text("删除")
+                    }
+                }
             }
         }
     }
@@ -370,31 +442,43 @@ private fun TemperatureRecordSheet(
     initialMethod: MeasurementMethod,
     initialMood: String = "",
     initialNote: String = "",
+    initialMeasuredAt: LocalDateTime,
     onDismiss: () -> Unit,
-    onSubmit: (Float, MeasurementMethod, String, String) -> Unit
+    onSubmit: (Float, MeasurementMethod, String, String, LocalDateTime) -> Unit
 ) {
     var temperature by rememberSaveable { mutableStateOf(initialTemperature) }
     var method by rememberSaveable { mutableStateOf(initialMethod) }
     var mood by rememberSaveable { mutableStateOf(initialMood) }
     var note by rememberSaveable { mutableStateOf(initialNote) }
+    var recordDate by rememberSaveable { mutableStateOf(initialMeasuredAt.format(recordDateFormatter)) }
+    var recordTime by rememberSaveable { mutableStateOf(initialMeasuredAt.format(recordTimeFormatter)) }
     var errorText by rememberSaveable { mutableStateOf("") }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss
-    ) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Text(text = title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(
-                text = "只保留当前记录需要的字段，保存后会立即写入时间线和趋势图。",
+                text = "支持直接录入或修正测量时间，保存后会立即反映到时间线和趋势图。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            RecordDateTimeFields(
+                dateValue = recordDate,
+                onDateChange = {
+                    recordDate = it
+                    errorText = ""
+                },
+                timeValue = recordTime,
+                onTimeChange = {
+                    recordTime = it
+                    errorText = ""
+                }
             )
             OutlinedTextField(
                 value = temperature,
@@ -451,10 +535,11 @@ private fun TemperatureRecordSheet(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     val value = temperature.toFloatOrNull()
-                    if (value == null) {
-                        errorText = "请输入正确的体温值"
-                    } else {
-                        onSubmit(value, method, mood, note)
+                    val measuredAt = parseRecordDateTime(recordDate, recordTime)
+                    when {
+                        value == null -> errorText = "请输入正确的体温值"
+                        measuredAt == null -> errorText = "请输入正确的日期和时间，例如 2026-06-22 和 14:30"
+                        else -> onSubmit(value, method, mood, note, measuredAt)
                     }
                 }
             ) {
@@ -479,32 +564,44 @@ private fun MedicineRecordSheet(
     initialDosage: String = "",
     initialReason: String = "",
     initialNote: String = "",
+    initialTakenAt: LocalDateTime,
     reminderPreview: String,
     onDismiss: () -> Unit,
-    onSubmit: (String, String, String, String) -> Unit
+    onSubmit: (String, String, String, String, LocalDateTime) -> Unit
 ) {
     var medicineName by rememberSaveable { mutableStateOf(initialMedicineName) }
     var dosage by rememberSaveable { mutableStateOf(initialDosage) }
     var reason by rememberSaveable { mutableStateOf(initialReason) }
     var note by rememberSaveable { mutableStateOf(initialNote) }
+    var recordDate by rememberSaveable { mutableStateOf(initialTakenAt.format(recordDateFormatter)) }
+    var recordTime by rememberSaveable { mutableStateOf(initialTakenAt.format(recordTimeFormatter)) }
     var errorText by rememberSaveable { mutableStateOf("") }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss
-    ) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Text(text = title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(
-                text = "给药表单放到底部弹层里，保存后可以继续停留在当前页面，不会打断回看记录。",
+                text = "给药记录支持补记时间，保存后提醒会按新时间重新安排。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            RecordDateTimeFields(
+                dateValue = recordDate,
+                onDateChange = {
+                    recordDate = it
+                    errorText = ""
+                },
+                timeValue = recordTime,
+                onTimeChange = {
+                    recordTime = it
+                    errorText = ""
+                }
             )
             QuickChoiceRow(
                 options = listOf("布洛芬混悬液", "对乙酰氨基酚", "口服补液", "其他")
@@ -520,25 +617,48 @@ private fun MedicineRecordSheet(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("药品名称") }
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = dosage,
-                    onValueChange = {
-                        dosage = it
-                        errorText = ""
-                    },
-                    modifier = Modifier.weight(1f),
-                    label = { Text("剂量") }
-                )
-                OutlinedTextField(
-                    value = reason,
-                    onValueChange = { reason = it },
-                    modifier = Modifier.weight(1f),
-                    label = { Text("原因") }
-                )
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val compact = maxWidth < 420.dp
+                if (compact) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            value = dosage,
+                            onValueChange = {
+                                dosage = it
+                                errorText = ""
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("剂量") }
+                        )
+                        OutlinedTextField(
+                            value = reason,
+                            onValueChange = { reason = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("原因") }
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = dosage,
+                            onValueChange = {
+                                dosage = it
+                                errorText = ""
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("剂量") }
+                        )
+                        OutlinedTextField(
+                            value = reason,
+                            onValueChange = { reason = it },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("原因") }
+                        )
+                    }
+                }
             }
             QuickChoiceRow(
                 options = listOf("退热", "补液", "医生交代", "睡前观察")
@@ -563,10 +683,11 @@ private fun MedicineRecordSheet(
             Button(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
-                    if (medicineName.isBlank() || dosage.isBlank()) {
-                        errorText = "请先填写药品名称和剂量"
-                    } else {
-                        onSubmit(medicineName, dosage, reason, note)
+                    val takenAt = parseRecordDateTime(recordDate, recordTime)
+                    when {
+                        medicineName.isBlank() || dosage.isBlank() -> errorText = "请先填写药品名称和剂量"
+                        takenAt == null -> errorText = "请输入正确的日期和时间，例如 2026-06-22 和 14:30"
+                        else -> onSubmit(medicineName, dosage, reason, note, takenAt)
                     }
                 }
             ) {
@@ -577,6 +698,56 @@ private fun MedicineRecordSheet(
                 onClick = onDismiss
             ) {
                 Text("取消")
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordDateTimeFields(
+    dateValue: String,
+    onDateChange: (String) -> Unit,
+    timeValue: String,
+    onTimeChange: (String) -> Unit
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 420.dp
+        if (compact) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = dateValue,
+                    onValueChange = onDateChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("日期") },
+                    placeholder = { Text("2026-06-22") }
+                )
+                OutlinedTextField(
+                    value = timeValue,
+                    onValueChange = onTimeChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("时间") },
+                    placeholder = { Text("14:30") }
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = dateValue,
+                    onValueChange = onDateChange,
+                    modifier = Modifier.weight(1f),
+                    label = { Text("日期") },
+                    placeholder = { Text("2026-06-22") }
+                )
+                OutlinedTextField(
+                    value = timeValue,
+                    onValueChange = onTimeChange,
+                    modifier = Modifier.weight(1f),
+                    label = { Text("时间") },
+                    placeholder = { Text("14:30") }
+                )
             }
         }
     }
@@ -643,4 +814,10 @@ private fun buildReminderPreview(viewModel: BabyCareViewModel): String {
             append(" 同时会创建一次后续观察提醒。")
         }
     }
+}
+
+private fun parseRecordDateTime(dateValue: String, timeValue: String): LocalDateTime? {
+    val date = runCatching { LocalDate.parse(dateValue, recordDateFormatter) }.getOrNull() ?: return null
+    val time = runCatching { LocalTime.parse(timeValue, recordTimeFormatter) }.getOrNull() ?: return null
+    return LocalDateTime.of(date, time)
 }

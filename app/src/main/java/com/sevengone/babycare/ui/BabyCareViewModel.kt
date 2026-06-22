@@ -81,14 +81,15 @@ class BabyCareViewModel(application: Application) : AndroidViewModel(application
         value: Float,
         method: MeasurementMethod,
         note: String,
-        mood: String
+        mood: String,
+        measuredAt: LocalDateTime = LocalDateTime.now()
     ) {
         viewModelScope.launch {
             repository.insertTemperature(
                 TemperatureRecord(
                     id = UUID.randomUUID().toString(),
                     temperatureCelsius = value,
-                    measuredAt = LocalDateTime.now(),
+                    measuredAt = measuredAt,
                     method = method,
                     note = note.ifBlank { "未填写备注" },
                     mood = mood.ifBlank { "未填写状态" }
@@ -123,10 +124,10 @@ class BabyCareViewModel(application: Application) : AndroidViewModel(application
         medicineName: String,
         dosage: String,
         reason: String,
-        note: String
+        note: String,
+        takenAt: LocalDateTime = LocalDateTime.now()
     ) {
         viewModelScope.launch {
-            val takenAt = LocalDateTime.now()
             val record = MedicineRecord(
                 id = UUID.randomUUID().toString(),
                 medicineName = medicineName,
@@ -244,6 +245,12 @@ class BabyCareViewModel(application: Application) : AndroidViewModel(application
             temperatureCountToday = dayTemps.size,
             medicineCountToday = dayMeds.size
         )
+    }
+
+    fun focusDate(): LocalDate {
+        val latestTemperatureDate = temperatureRecords.maxByOrNull { it.measuredAt }?.measuredAt?.toLocalDate()
+        val latestMedicineDate = medicineRecords.maxByOrNull { it.takenAt }?.takenAt?.toLocalDate()
+        return listOfNotNull(latestTemperatureDate, latestMedicineDate).maxOrNull() ?: LocalDate.now()
     }
 
     fun timelineFor(date: LocalDate = LocalDate.now()): List<TimelineEvent> {
