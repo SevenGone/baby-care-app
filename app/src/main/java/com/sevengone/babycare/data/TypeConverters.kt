@@ -4,7 +4,7 @@ import androidx.room.TypeConverter
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-class TypeConverters {
+class BabyCareTypeConverters {
     @TypeConverter
     fun localDateToString(value: LocalDate?): String? = value?.toString()
 

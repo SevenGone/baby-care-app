@@ -16,7 +16,7 @@ import androidx.room.TypeConverters
     version = 1,
     exportSchema = false
 )
-@TypeConverters(TypeConverters::class)
+@TypeConverters(BabyCareTypeConverters::class)
 abstract class BabyCareDatabase : RoomDatabase() {
     abstract fun dao(): BabyCareDao
 
