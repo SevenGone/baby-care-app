@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -30,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -167,9 +169,6 @@ fun TemperatureChart(
 
     val scrollState = rememberScrollState()
     var zoom by rememberSaveable { mutableFloatStateOf(1f) }
-    val transformState = rememberTransformableState { zoomChange, _, _ ->
-        zoom = (zoom * zoomChange).coerceIn(1f, 2.4f)
-    }
     val earliestMoment = listOfNotNull(
         records.minByOrNull { it.measuredAt }?.measuredAt,
         medicineRecords.minByOrNull { it.takenAt }?.takenAt
@@ -197,8 +196,19 @@ fun TemperatureChart(
     var hasAutoPositioned by remember(records.size, medicineRecords.size, latestMoment, startDate, endDate) {
         mutableStateOf(false)
     }
+    var pendingAnchorRatio by remember { mutableFloatStateOf(-1f) }
+    var lastViewportWidthPx by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(scrollState.maxValue, contentWidthPx, latestRatio, hasAutoPositioned) {
+    LaunchedEffect(scrollState.maxValue, contentWidthPx, latestRatio, hasAutoPositioned, pendingAnchorRatio, lastViewportWidthPx) {
+        if (pendingAnchorRatio >= 0f && lastViewportWidthPx > 0) {
+            val target = (pendingAnchorRatio * contentWidthPx - lastViewportWidthPx / 2f)
+                .roundToInt()
+                .coerceIn(0, scrollState.maxValue)
+            scrollState.scrollTo(target)
+            pendingAnchorRatio = -1f
+            hasAutoPositioned = true
+            return@LaunchedEffect
+        }
         if (!hasAutoPositioned && scrollState.maxValue > 0) {
             val viewportWidthPx = (contentWidthPx - scrollState.maxValue).coerceAtLeast(0f)
             val target = (latestRatio * contentWidthPx - viewportWidthPx * 0.72f)
@@ -209,85 +219,148 @@ fun TemperatureChart(
         }
     }
 
-    Row(modifier = Modifier.fillMaxWidth()) {
-        Canvas(
-            modifier = Modifier
-                .width(yAxisWidth)
-                .height(chartHeight)
-        ) {
-            val topPadding = 22.dp.toPx()
-            val bottomPadding = 62.dp.toPx()
-            val plotHeight = size.height - topPadding - bottomPadding
-            fun mapY(value: Float): Float {
-                val ratio = (value - 36f) / (39.5f - 36f)
-                return topPadding + plotHeight - ratio * plotHeight
-            }
-            listOf(36f, 36.5f, 37f, 37.5f, 38f, 38.5f, 39f).forEach { temp ->
-                val y = mapY(temp)
-                drawContext.canvas.nativeCanvas.drawText(
-                    if (temp % 1f == 0f) temp.toInt().toString() else temp.toString(),
-                    2.dp.toPx(),
-                    y + 4.dp.toPx(),
-                    Paint().apply {
-                        color = if (temp == 38.5f) warningColor.toArgbCompat() else textColor.toArgbCompat()
-                        textSize = 10.dp.toPx()
-                        isAntiAlias = true
-                    }
-                )
-            }
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val chartViewportWidthPx = remember(maxWidth, density) {
+            with(density) { (maxWidth - yAxisWidth).coerceAtLeast(0.dp).toPx().roundToInt() }
         }
 
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .horizontalScroll(scrollState)
-                .transformable(
-                    state = transformState,
-                    canPan = { false }
-                )
-        ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
             Canvas(
                 modifier = Modifier
-                    .width(dynamicWidth)
+                    .width(yAxisWidth)
                     .height(chartHeight)
             ) {
-                val leftPadding = 4.dp.toPx()
-                val rightPadding = 18.dp.toPx()
                 val topPadding = 22.dp.toPx()
                 val bottomPadding = 62.dp.toPx()
-                val chartWidth = size.width - leftPadding - rightPadding
                 val plotHeight = size.height - topPadding - bottomPadding
-                val timelineStart = startDate.atStartOfDay()
-
-                fun mapX(time: LocalDateTime): Float {
-                    val minutes = Duration.between(timelineStart, time).toMinutes().toFloat()
-                    return leftPadding + (minutes / totalMinutes) * chartWidth
-                }
-
                 fun mapY(value: Float): Float {
                     val ratio = (value - 36f) / (39.5f - 36f)
                     return topPadding + plotHeight - ratio * plotHeight
                 }
+                listOf(36f, 36.5f, 37f, 37.5f, 38f, 38.5f, 39f).forEach { temp ->
+                    val y = mapY(temp)
+                    drawContext.canvas.nativeCanvas.drawText(
+                        if (temp % 1f == 0f) temp.toInt().toString() else temp.toString(),
+                        2.dp.toPx(),
+                        y + 4.dp.toPx(),
+                        Paint().apply {
+                            color = if (temp == 38.5f) warningColor.toArgbCompat() else textColor.toArgbCompat()
+                            textSize = 10.dp.toPx()
+                            isAntiAlias = true
+                        }
+                    )
+                }
+            }
 
-                drawRoundRect(
-                    color = rangeColor,
-                    topLeft = Offset(leftPadding, mapY(37.5f)),
-                    size = Size(width = chartWidth, height = mapY(36.0f) - mapY(37.5f)),
-                    cornerRadius = CornerRadius(18.dp.toPx(), 18.dp.toPx())
-                )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(scrollState)
+                    .transformable(
+                        state = rememberTransformableState { zoomChange, _, _ ->
+                            val currentViewportWidth = chartViewportWidthPx.coerceAtLeast(0)
+                            lastViewportWidthPx = currentViewportWidth
+                            if (currentViewportWidth > 0 && contentWidthPx > 0f) {
+                                val centerRatio = ((scrollState.value + currentViewportWidth / 2f) / contentWidthPx)
+                                    .coerceIn(0f, 1f)
+                                pendingAnchorRatio = centerRatio
+                            }
+                            zoom = (zoom * zoomChange).coerceIn(1f, 2.4f)
+                        },
+                        canPan = { false }
+                    )
+            ) {
+                Canvas(
+                    modifier = Modifier
+                        .width(dynamicWidth)
+                        .height(chartHeight)
+                ) {
+                    val leftPadding = 4.dp.toPx()
+                    val rightPadding = 18.dp.toPx()
+                    val topPadding = 22.dp.toPx()
+                    val bottomPadding = 62.dp.toPx()
+                    val chartWidth = size.width - leftPadding - rightPadding
+                    val plotHeight = size.height - topPadding - bottomPadding
+                    val timelineStart = startDate.atStartOfDay()
 
-                generateSequence(startDate) { it.plusDays(1) }
-                    .takeWhile { !it.isAfter(endDate.plusDays(1)) }
-                    .forEach { date ->
-                        val x = mapX(date.atStartOfDay())
-                        drawLine(gridColor, Offset(x, topPadding), Offset(x, size.height - bottomPadding), strokeWidth = 1.2f)
-                        if (!date.isAfter(endDate)) {
+                    fun mapX(time: LocalDateTime): Float {
+                        val minutes = Duration.between(timelineStart, time).toMinutes().toFloat()
+                        return leftPadding + (minutes / totalMinutes) * chartWidth
+                    }
+
+                    fun mapY(value: Float): Float {
+                        val ratio = (value - 36f) / (39.5f - 36f)
+                        return topPadding + plotHeight - ratio * plotHeight
+                    }
+
+                    drawRoundRect(
+                        color = rangeColor,
+                        topLeft = Offset(leftPadding, mapY(37.5f)),
+                        size = Size(width = chartWidth, height = mapY(36.0f) - mapY(37.5f)),
+                        cornerRadius = CornerRadius(18.dp.toPx(), 18.dp.toPx())
+                    )
+
+                    generateSequence(startDate) { it.plusDays(1) }
+                        .takeWhile { !it.isAfter(endDate.plusDays(1)) }
+                        .forEach { date ->
+                            val x = mapX(date.atStartOfDay())
+                            drawLine(gridColor, Offset(x, topPadding), Offset(x, size.height - bottomPadding), strokeWidth = 1.2f)
+                            if (!date.isAfter(endDate)) {
+                                drawContext.canvas.nativeCanvas.drawText(
+                                    date.format(chartDateFormatter),
+                                    x + 6.dp.toPx(),
+                                    size.height - 28.dp.toPx(),
+                                    Paint().apply {
+                                        color = textColor.toArgbCompat()
+                                        textSize = 10.dp.toPx()
+                                        isAntiAlias = true
+                                    }
+                                )
+                            }
+                        }
+
+                    val hourStep = when {
+                        zoom >= 2f -> 2L
+                        zoom >= 1.5f -> 4L
+                        else -> 6L
+                    }
+                    generateSequence(timelineStart) { it.plusHours(hourStep) }
+                        .takeWhile { !it.isAfter(endDate.plusDays(1).atStartOfDay()) }
+                        .forEach { time ->
+                            val x = mapX(time)
+                            drawLine(
+                                color = gridColor.copy(alpha = 0.55f),
+                                start = Offset(x, topPadding),
+                                end = Offset(x, size.height - bottomPadding),
+                                strokeWidth = 0.9f
+                            )
                             drawContext.canvas.nativeCanvas.drawText(
-                                date.format(chartDateFormatter),
-                                x + 6.dp.toPx(),
-                                size.height - 28.dp.toPx(),
+                                time.format(chartTimeFormatter),
+                                x - min(10.dp.toPx(), x / 12f),
+                                size.height - 10.dp.toPx(),
                                 Paint().apply {
-                                    color = textColor.toArgbCompat()
+                                    color = textColor.copy(alpha = 0.72f).toArgbCompat()
+                                    textSize = 8.dp.toPx()
+                                    isAntiAlias = true
+                                }
+                            )
+                        }
+
+                    listOf(36f, 36.5f, 37f, 37.5f, 38f, 38.5f, 39f).forEach { temp ->
+                        val y = mapY(temp)
+                        drawLine(
+                            color = if (temp == 38.5f) warningColor else gridColor,
+                            start = Offset(leftPadding, y),
+                            end = Offset(size.width - rightPadding, y),
+                            strokeWidth = if (temp == 38.5f) 2.1f else 1.1f
+                        )
+                        if (temp == 38.5f) {
+                            drawContext.canvas.nativeCanvas.drawText(
+                                "38.5°",
+                                leftPadding + 8.dp.toPx(),
+                                y - 8.dp.toPx(),
+                                Paint().apply {
+                                    color = warningColor.toArgbCompat()
                                     textSize = 10.dp.toPx()
                                     isAntiAlias = true
                                 }
@@ -295,89 +368,41 @@ fun TemperatureChart(
                         }
                     }
 
-                val hourStep = when {
-                    zoom >= 2f -> 2L
-                    zoom >= 1.5f -> 4L
-                    else -> 6L
-                }
-                generateSequence(timelineStart) { it.plusHours(hourStep) }
-                    .takeWhile { !it.isAfter(endDate.plusDays(1).atStartOfDay()) }
-                    .forEach { time ->
-                        val x = mapX(time)
+                    val path = Path()
+                    records.forEachIndexed { index, record ->
+                        val point = Offset(mapX(record.measuredAt), mapY(record.temperatureCelsius))
+                        if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
+                    }
+                    drawPath(path, lineColor, style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round))
+
+                    records.forEach { record ->
+                        val center = Offset(mapX(record.measuredAt), mapY(record.temperatureCelsius))
+                        drawCircle(Color.White, radius = 3.4.dp.toPx(), center = center)
+                        drawCircle(lineColor, radius = 2.4.dp.toPx(), center = center)
+                    }
+
+                    medicineRecords.forEach { medicine ->
+                        val markerX = mapX(medicine.takenAt)
                         drawLine(
-                            color = gridColor.copy(alpha = 0.55f),
-                            start = Offset(x, topPadding),
-                            end = Offset(x, size.height - bottomPadding),
-                            strokeWidth = 0.9f
+                            medicineColor.copy(alpha = 0.18f),
+                            Offset(markerX, topPadding),
+                            Offset(markerX, size.height - bottomPadding + 6.dp.toPx()),
+                            strokeWidth = 1.4f
                         )
-                        drawContext.canvas.nativeCanvas.drawText(
-                            time.format(chartTimeFormatter),
-                            x - min(10.dp.toPx(), x / 12f),
-                            size.height - 10.dp.toPx(),
-                            Paint().apply {
-                                color = textColor.copy(alpha = 0.72f).toArgbCompat()
-                                textSize = 8.dp.toPx()
-                                isAntiAlias = true
-                            }
-                        )
-                    }
-
-                listOf(36f, 36.5f, 37f, 37.5f, 38f, 38.5f, 39f).forEach { temp ->
-                    val y = mapY(temp)
-                    drawLine(
-                        color = if (temp == 38.5f) warningColor else gridColor,
-                        start = Offset(leftPadding, y),
-                        end = Offset(size.width - rightPadding, y),
-                        strokeWidth = if (temp == 38.5f) 2.1f else 1.1f
-                    )
-                    if (temp == 38.5f) {
-                        drawContext.canvas.nativeCanvas.drawText(
-                            "38.5°",
-                            leftPadding + 8.dp.toPx(),
-                            y - 8.dp.toPx(),
-                            Paint().apply {
-                                color = warningColor.toArgbCompat()
-                                textSize = 10.dp.toPx()
-                                isAntiAlias = true
-                            }
-                        )
-                    }
-                }
-
-                val path = Path()
-                records.forEachIndexed { index, record ->
-                    val point = Offset(mapX(record.measuredAt), mapY(record.temperatureCelsius))
-                    if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
-                }
-                drawPath(path, lineColor, style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round))
-
-                records.forEach { record ->
-                    val center = Offset(mapX(record.measuredAt), mapY(record.temperatureCelsius))
-                    drawCircle(Color.White, radius = 3.4.dp.toPx(), center = center)
-                    drawCircle(lineColor, radius = 2.4.dp.toPx(), center = center)
-                }
-
-                medicineRecords.forEach { medicine ->
-                    val markerX = mapX(medicine.takenAt)
-                    drawLine(
-                        medicineColor.copy(alpha = 0.18f),
-                        Offset(markerX, topPadding),
-                        Offset(markerX, size.height - bottomPadding + 6.dp.toPx()),
-                        strokeWidth = 1.4f
-                    )
-                    val markerY = topPadding + 16.dp.toPx()
-                    drawCircle(medicineColor, radius = 3.4.dp.toPx(), center = Offset(markerX, markerY))
-                    if (showMedicineLabels) {
-                        drawContext.canvas.nativeCanvas.drawText(
-                            medicine.medicineName,
-                            markerX + 6.dp.toPx(),
-                            markerY + 3.dp.toPx(),
-                            Paint().apply {
-                                color = medicineColor.copy(alpha = 0.52f).toArgbCompat()
-                                textSize = 8.dp.toPx()
-                                isAntiAlias = true
-                            }
-                        )
+                        val markerY = topPadding + 16.dp.toPx()
+                        drawCircle(medicineColor, radius = 3.4.dp.toPx(), center = Offset(markerX, markerY))
+                        if (showMedicineLabels) {
+                            drawContext.canvas.nativeCanvas.drawText(
+                                medicine.medicineName,
+                                markerX + 6.dp.toPx(),
+                                markerY + 3.dp.toPx(),
+                                Paint().apply {
+                                    color = medicineColor.copy(alpha = 0.52f).toArgbCompat()
+                                    textSize = 8.dp.toPx()
+                                    isAntiAlias = true
+                                }
+                            )
+                        }
                     }
                 }
             }
