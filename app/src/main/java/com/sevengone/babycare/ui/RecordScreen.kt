@@ -1,25 +1,26 @@
 package com.sevengone.babycare.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ChevronLeft
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.MedicalServices
@@ -28,14 +29,15 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -44,21 +46,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.sevengone.babycare.data.MeasurementMethod
 import com.sevengone.babycare.data.MedicineRecord
 import com.sevengone.babycare.data.TemperatureRecord
-import com.sevengone.babycare.data.TimelineEvent
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlin.math.roundToInt
 
-private val recordDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-private val recordTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val timelineTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val recordDayFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("M 月 d 日")
+private val recordIsoDateFormatter: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
 private enum class RecordTab(val label: String) {
     Temperature("体温"),
@@ -82,7 +83,6 @@ fun RecordScreen(
     var selectedDateValue by rememberSaveable { mutableStateOf(availableDates.first().toString()) }
     var currentTab by rememberSaveable { mutableStateOf(RecordTab.Temperature) }
     var sheetState by remember { mutableStateOf<RecordSheetState?>(null) }
-
     val selectedDate = availableDates.firstOrNull { it.toString() == selectedDateValue } ?: availableDates.first()
     val temperatureRecords = viewModel.temperatureRecords
         .filter { it.measuredAt.toLocalDate() == selectedDate }
@@ -96,8 +96,8 @@ fun RecordScreen(
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                top = 18.dp + contentPadding.calculateTopPadding(),
-                bottom = 112.dp
+                top = topSafeContentPadding(),
+                bottom = 126.dp + contentPadding.calculateBottomPadding()
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -123,184 +123,157 @@ fun RecordScreen(
 
             item {
                 GlassCard {
-                    SectionHeader(title = "记录")
-                    RecordDateFilterRow(
-                        dates = availableDates,
-                        selectedDate = selectedDate,
-                        onDateSelected = { selectedDateValue = it.toString() }
-                    )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RecordTab.entries.forEach { tab ->
-                            FilterChip(
-                                selected = currentTab == tab,
-                                onClick = { currentTab = tab },
-                                label = { Text(tab.label) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
+                        SectionHeader(title = "记录", subtitle = selectedDate.format(recordDayFormatter))
+                        RecordTabSwitch(currentTab = currentTab, onTabChange = { currentTab = it })
                     }
+                    DateStepper(
+                        selectedDate = selectedDate,
+                        availableDates = availableDates,
+                        onDateSelected = { selectedDateValue = it.toString() }
+                    )
                 }
             }
 
-            when (currentTab) {
-                RecordTab.Temperature -> {
-                    items(temperatureRecords) { record ->
-                        TimelineRecordCard(
-                            time = record.measuredAt.format(timelineTimeFormatter),
-                            title = "${record.temperatureCelsius}°C",
-                            subtitle = record.method.label,
-                            detail = record.mood,
-                            note = record.note,
-                            accentLabel = "体温",
-                            onEdit = { sheetState = RecordSheetState.EditTemperature(record) },
-                            onDelete = {
-                                viewModel.deleteTemperatureRecord(record.id)
-                                onSaved("体温记录已删除")
-                            }
-                        )
-                    }
-                }
+            item {
+                when (currentTab) {
+                    RecordTab.Temperature -> TemperatureTimeline(
+                        records = temperatureRecords,
+                        onEdit = { sheetState = RecordSheetState.EditTemperature(it) },
+                        onDelete = {
+                            viewModel.deleteTemperatureRecord(it.id)
+                            onSaved("体温记录已删除")
+                        }
+                    )
 
-                RecordTab.Medicine -> {
-                    items(medicineRecords) { record ->
-                        TimelineRecordCard(
-                            time = record.takenAt.format(timelineTimeFormatter),
-                            title = record.medicineName,
-                            subtitle = record.dosage,
-                            detail = record.reason,
-                            note = record.note,
-                            accentLabel = "给药",
-                            onEdit = { sheetState = RecordSheetState.EditMedicine(record) },
-                            onDelete = {
-                                viewModel.deleteMedicineRecord(record.id)
-                                onSaved("给药记录已删除，关联提醒已取消")
-                            }
-                        )
-                    }
+                    RecordTab.Medicine -> MedicineTimeline(
+                        records = medicineRecords,
+                        onEdit = { sheetState = RecordSheetState.EditMedicine(it) },
+                        onDelete = {
+                            viewModel.deleteMedicineRecord(it.id)
+                            onSaved("给药记录已删除，关联提醒已取消")
+                        }
+                    )
                 }
             }
         }
 
         when (val currentSheet = sheetState) {
             null -> Unit
-
-            RecordSheetState.NewTemperature -> {
-                TemperatureRecordSheet(
-                    title = "体温",
-                    submitLabel = "保存",
-                    initialMethod = MeasurementMethod.Ear,
-                    initialMeasuredAt = LocalDateTime.now(),
-                    onDismiss = { sheetState = null },
-                    onSubmit = { value, method, mood, note, measuredAt ->
-                        viewModel.addTemperatureRecord(
-                            value = value,
-                            method = method,
-                            note = note,
-                            mood = mood,
-                            measuredAt = measuredAt
-                        )
-                        sheetState = null
-                        onSaved("体温记录已保存")
-                    }
-                )
-            }
-
-            RecordSheetState.NewMedicine -> {
-                MedicineRecordSheet(
-                    title = "给药",
-                    submitLabel = "保存",
-                    reminderPreview = buildReminderPreview(viewModel),
-                    initialTakenAt = LocalDateTime.now(),
-                    onDismiss = { sheetState = null },
-                    onSubmit = { name, dosage, reason, note, takenAt ->
-                        viewModel.addMedicineRecord(
-                            medicineName = name,
-                            dosage = dosage,
-                            reason = reason,
-                            note = note,
-                            takenAt = takenAt
-                        )
-                        sheetState = null
-                        onSaved("给药记录已保存，并已按设置安排提醒")
-                    }
-                )
-            }
-
-            is RecordSheetState.EditTemperature -> {
-                TemperatureRecordSheet(
-                    title = "编辑体温",
-                    submitLabel = "保存",
-                    initialTemperature = currentSheet.record.temperatureCelsius.toString(),
-                    initialMethod = currentSheet.record.method,
-                    initialMood = currentSheet.record.mood,
-                    initialNote = currentSheet.record.note,
-                    initialMeasuredAt = currentSheet.record.measuredAt,
-                    onDismiss = { sheetState = null },
-                    onSubmit = { value, method, mood, note, measuredAt ->
-                        viewModel.updateTemperatureRecord(
-                            id = currentSheet.record.id,
-                            value = value,
-                            method = method,
-                            note = note,
-                            mood = mood,
-                            measuredAt = measuredAt
-                        )
-                        sheetState = null
-                        onSaved("体温记录已更新")
-                    }
-                )
-            }
-
-            is RecordSheetState.EditMedicine -> {
-                MedicineRecordSheet(
-                    title = "编辑给药",
-                    submitLabel = "保存",
-                    initialMedicineName = currentSheet.record.medicineName,
-                    initialDosage = currentSheet.record.dosage,
-                    initialReason = currentSheet.record.reason,
-                    initialNote = currentSheet.record.note,
-                    initialTakenAt = currentSheet.record.takenAt,
-                    reminderPreview = "保存后会按当前提醒设置重新安排提醒。",
-                    onDismiss = { sheetState = null },
-                    onSubmit = { name, dosage, reason, note, takenAt ->
-                        viewModel.updateMedicineRecord(
-                            id = currentSheet.record.id,
-                            medicineName = name,
-                            dosage = dosage,
-                            reason = reason,
-                            note = note,
-                            takenAt = takenAt
-                        )
-                        sheetState = null
-                        onSaved("给药记录已更新")
-                    }
-                )
-            }
+            RecordSheetState.NewTemperature -> TemperatureRecordSheet(
+                title = "体温",
+                submitLabel = "保存",
+                initialTemperature = 37.0f,
+                initialMethod = MeasurementMethod.Ear,
+                initialMeasuredAt = LocalDateTime.now(),
+                onDismiss = { sheetState = null },
+                onSubmit = { value, method, mood, note, measuredAt ->
+                    viewModel.addTemperatureRecord(value, method, note, mood, measuredAt)
+                    sheetState = null
+                    onSaved("体温记录已保存")
+                }
+            )
+            RecordSheetState.NewMedicine -> MedicineRecordSheet(
+                title = "给药",
+                submitLabel = "保存",
+                reminderPreview = buildReminderPreview(viewModel),
+                initialTakenAt = LocalDateTime.now(),
+                onDismiss = { sheetState = null },
+                onSubmit = { name, dosage, reason, note, takenAt ->
+                    viewModel.addMedicineRecord(name, dosage, reason, note, takenAt)
+                    sheetState = null
+                    onSaved("给药记录已保存，并已按设置安排提醒")
+                }
+            )
+            is RecordSheetState.EditTemperature -> TemperatureRecordSheet(
+                title = "编辑体温",
+                submitLabel = "保存",
+                initialTemperature = currentSheet.record.temperatureCelsius,
+                initialMethod = currentSheet.record.method,
+                initialMood = currentSheet.record.mood,
+                initialNote = currentSheet.record.note,
+                initialMeasuredAt = currentSheet.record.measuredAt,
+                onDismiss = { sheetState = null },
+                onSubmit = { value, method, mood, note, measuredAt ->
+                    viewModel.updateTemperatureRecord(currentSheet.record.id, value, method, note, mood, measuredAt)
+                    sheetState = null
+                    onSaved("体温记录已更新")
+                }
+            )
+            is RecordSheetState.EditMedicine -> MedicineRecordSheet(
+                title = "编辑给药",
+                submitLabel = "保存",
+                initialMedicineName = currentSheet.record.medicineName,
+                initialDosage = currentSheet.record.dosage,
+                initialReason = currentSheet.record.reason,
+                initialNote = currentSheet.record.note,
+                initialTakenAt = currentSheet.record.takenAt,
+                reminderPreview = "保存后会按当前提醒设置重新安排提醒。",
+                onDismiss = { sheetState = null },
+                onSubmit = { name, dosage, reason, note, takenAt ->
+                    viewModel.updateMedicineRecord(currentSheet.record.id, name, dosage, reason, note, takenAt)
+                    sheetState = null
+                    onSaved("给药记录已更新")
+                }
+            )
         }
     }
 }
 
 @Composable
-private fun RecordDateFilterRow(
-    dates: List<LocalDate>,
-    selectedDate: LocalDate,
-    onDateSelected: (LocalDate) -> Unit
+private fun RecordTabSwitch(
+    currentTab: RecordTab,
+    onTabChange: (RecordTab) -> Unit
 ) {
     Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.46f))
+            .padding(4.dp)
     ) {
-        dates.forEach { date ->
+        RecordTab.entries.forEach { tab ->
             FilterChip(
-                selected = selectedDate == date,
-                onClick = { onDateSelected(date) },
-                label = { Text(date.format(recordDayFormatter)) }
+                selected = currentTab == tab,
+                onClick = { onTabChange(tab) },
+                label = { Text(tab.label) }
             )
+        }
+    }
+}
+
+@Composable
+private fun DateStepper(
+    selectedDate: LocalDate,
+    availableDates: List<LocalDate>,
+    onDateSelected: (LocalDate) -> Unit
+) {
+    val index = availableDates.indexOf(selectedDate).coerceAtLeast(0)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(
+            enabled = index < availableDates.lastIndex,
+            onClick = { onDateSelected(availableDates[index + 1]) }
+        ) {
+            Icon(imageVector = Icons.Rounded.ChevronLeft, contentDescription = "上一天")
+        }
+        Text(
+            text = selectedDate.format(DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日")),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        IconButton(
+            enabled = index > 0,
+            onClick = { onDateSelected(availableDates[index - 1]) }
+        ) {
+            Icon(imageVector = Icons.Rounded.ChevronRight, contentDescription = "下一天")
         }
     }
 }
@@ -312,102 +285,132 @@ private fun QuickEntryButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    Button(
-        modifier = modifier,
-        onClick = onClick
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp)
-        )
+    Button(modifier = modifier, onClick = onClick) {
+        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(18.dp))
         Text(title)
     }
 }
 
 @Composable
-private fun TimelineRecordCard(
-    time: String,
-    title: String,
-    subtitle: String,
-    detail: String,
-    note: String,
-    accentLabel: String,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+private fun TemperatureTimeline(
+    records: List<TemperatureRecord>,
+    onEdit: (TemperatureRecord) -> Unit,
+    onDelete: (TemperatureRecord) -> Unit
 ) {
     GlassCard {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = time,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Box(
-                    modifier = Modifier
-                        .padding(top = 6.dp)
-                        .width(2.dp)
-                        .weight(1f, fill = false)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "$subtitle · $detail",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (note.isNotBlank()) {
-                    Text(
-                        text = note,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Text(
-                    text = accentLabel,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
+        if (records.isEmpty()) {
+            Text(
+                text = "这一天还没有体温记录",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            records.forEachIndexed { index, record ->
+                TimelineRecordItem(
+                    time = record.measuredAt.format(timelineTimeFormatter),
+                    title = "${record.temperatureCelsius}°C",
+                    subtitle = "${record.method.label} · ${record.mood}",
+                    note = record.note,
+                    accentLabel = "体温",
+                    isLast = index == records.lastIndex,
+                    onEdit = { onEdit(record) },
+                    onDelete = { onDelete(record) }
                 )
             }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            OutlinedButton(
-                modifier = Modifier.weight(1f),
-                onClick = onEdit
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Edit,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
+    }
+}
+
+@Composable
+private fun MedicineTimeline(
+    records: List<MedicineRecord>,
+    onEdit: (MedicineRecord) -> Unit,
+    onDelete: (MedicineRecord) -> Unit
+) {
+    GlassCard {
+        if (records.isEmpty()) {
+            Text(
+                text = "这一天还没有给药记录",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            records.forEachIndexed { index, record ->
+                TimelineRecordItem(
+                    time = record.takenAt.format(timelineTimeFormatter),
+                    title = record.medicineName,
+                    subtitle = "${record.dosage} · ${record.reason}",
+                    note = record.note,
+                    accentLabel = "给药",
+                    isLast = index == records.lastIndex,
+                    onEdit = { onEdit(record) },
+                    onDelete = { onDelete(record) }
                 )
-                Text("编辑")
             }
-            OutlinedButton(
-                modifier = Modifier.weight(1f),
-                onClick = onDelete
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Delete,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
+        }
+    }
+}
+
+@Composable
+private fun TimelineRecordItem(
+    time: String,
+    title: String,
+    subtitle: String,
+    note: String,
+    accentLabel: String,
+    isLast: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(
+            modifier = Modifier.width(62.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(text = time, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Box(
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+            if (!isLast) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .width(3.dp)
+                        .height(92.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
                 )
-                Text("删除")
+            }
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(bottom = if (isLast) 0.dp else 18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (note.isNotBlank()) {
+                Text(text = note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(text = accentLabel, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(modifier = Modifier.weight(1f), onClick = onEdit) {
+                    Icon(imageVector = Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("编辑")
+                }
+                OutlinedButton(modifier = Modifier.weight(1f), onClick = onDelete) {
+                    Icon(imageVector = Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("删除")
+                }
             }
         }
     }
@@ -418,7 +421,7 @@ private fun TimelineRecordCard(
 private fun TemperatureRecordSheet(
     title: String,
     submitLabel: String,
-    initialTemperature: String = "",
+    initialTemperature: Float,
     initialMethod: MeasurementMethod,
     initialMood: String = "",
     initialNote: String = "",
@@ -426,100 +429,40 @@ private fun TemperatureRecordSheet(
     onDismiss: () -> Unit,
     onSubmit: (Float, MeasurementMethod, String, String, LocalDateTime) -> Unit
 ) {
-    var temperature by rememberSaveable { mutableStateOf(initialTemperature) }
     var method by rememberSaveable { mutableStateOf(initialMethod) }
     var mood by rememberSaveable { mutableStateOf(initialMood) }
     var note by rememberSaveable { mutableStateOf(initialNote) }
-    var recordDate by rememberSaveable { mutableStateOf(initialMeasuredAt.format(recordDateFormatter)) }
-    var recordTime by rememberSaveable { mutableStateOf(initialMeasuredAt.format(recordTimeFormatter)) }
-    var errorText by rememberSaveable { mutableStateOf("") }
+    var dateValue by rememberSaveable { mutableStateOf(initialMeasuredAt.toLocalDate().format(recordIsoDateFormatter)) }
+    var hour by rememberSaveable { mutableIntStateOf(initialMeasuredAt.hour) }
+    var minute by rememberSaveable { mutableIntStateOf(initialMeasuredAt.minute) }
+    var tempIndex by rememberSaveable { mutableIntStateOf(((initialTemperature - 34.0f) * 10).roundToInt().coerceIn(0, 70)) }
+    val tempValues = remember { (340..410).map { String.format(Locale.US, "%.1f°C", it / 10f) } }
+    val date = runCatching { LocalDate.parse(dateValue, recordIsoDateFormatter) }.getOrDefault(initialMeasuredAt.toLocalDate())
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            RecordDateTimeFields(
-                dateValue = recordDate,
-                onDateChange = {
-                    recordDate = it
-                    errorText = ""
-                },
-                timeValue = recordTime,
-                onTimeChange = {
-                    recordTime = it
-                    errorText = ""
-                }
+        SheetContent(title = title) {
+            DateTimeWheel(
+                date = date,
+                hour = hour,
+                minute = minute,
+                onDateChange = { dateValue = it.format(recordIsoDateFormatter) },
+                onHourChange = { hour = it },
+                onMinuteChange = { minute = it }
             )
-            OutlinedTextField(
-                value = temperature,
-                onValueChange = {
-                    temperature = it
-                    errorText = ""
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("体温") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                MeasurementMethod.entries.take(2).forEach { item ->
-                    FilterChip(
-                        selected = method == item,
-                        onClick = { method = item },
-                        label = { Text(item.label) },
-                        modifier = Modifier.weight(1f)
-                    )
+            Text(text = "体温", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            WheelPicker(values = tempValues, selectedIndex = tempIndex, onSelectedIndexChange = { tempIndex = it }, modifier = Modifier.fillMaxWidth())
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MeasurementMethod.entries.forEach { item ->
+                    FilterChip(selected = method == item, onClick = { method = item }, label = { Text(item.label) }, modifier = Modifier.weight(1f))
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                MeasurementMethod.entries.drop(2).forEach { item ->
-                    FilterChip(
-                        selected = method == item,
-                        onClick = { method = item },
-                        label = { Text(item.label) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-            OutlinedTextField(
-                value = mood,
-                onValueChange = { mood = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("状态") }
-            )
-            OutlinedTextField(
-                value = note,
-                onValueChange = { note = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("备注") }
-            )
-            if (errorText.isNotBlank()) {
-                Text(
-                    text = errorText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
+            OutlinedTextField(value = mood, onValueChange = { mood = it }, modifier = Modifier.fillMaxWidth(), label = { Text("状态") })
+            OutlinedTextField(value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth(), label = { Text("备注") })
             Button(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
-                    val value = temperature.toFloatOrNull()
-                    val measuredAt = parseRecordDateTime(recordDate, recordTime)
-                    when {
-                        value == null -> errorText = "请输入正确体温"
-                        measuredAt == null -> errorText = "请输入正确日期和时间"
-                        else -> onSubmit(value, method, mood, note, measuredAt)
-                    }
+                    val value = 34.0f + tempIndex / 10f
+                    onSubmit(value, method, mood, note, LocalDateTime.of(date, LocalTime.of(hour, minute)))
                 }
             ) {
                 Text(submitLabel)
@@ -546,86 +489,39 @@ private fun MedicineRecordSheet(
     var dosage by rememberSaveable { mutableStateOf(initialDosage) }
     var reason by rememberSaveable { mutableStateOf(initialReason) }
     var note by rememberSaveable { mutableStateOf(initialNote) }
-    var recordDate by rememberSaveable { mutableStateOf(initialTakenAt.format(recordDateFormatter)) }
-    var recordTime by rememberSaveable { mutableStateOf(initialTakenAt.format(recordTimeFormatter)) }
+    var dateValue by rememberSaveable { mutableStateOf(initialTakenAt.toLocalDate().format(recordIsoDateFormatter)) }
+    var hour by rememberSaveable { mutableIntStateOf(initialTakenAt.hour) }
+    var minute by rememberSaveable { mutableIntStateOf(initialTakenAt.minute) }
     var errorText by rememberSaveable { mutableStateOf("") }
+    val date = runCatching { LocalDate.parse(dateValue, recordIsoDateFormatter) }.getOrDefault(initialTakenAt.toLocalDate())
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            RecordDateTimeFields(
-                dateValue = recordDate,
-                onDateChange = {
-                    recordDate = it
-                    errorText = ""
-                },
-                timeValue = recordTime,
-                onTimeChange = {
-                    recordTime = it
-                    errorText = ""
-                }
+        SheetContent(title = title) {
+            DateTimeWheel(
+                date = date,
+                hour = hour,
+                minute = minute,
+                onDateChange = { dateValue = it.format(recordIsoDateFormatter) },
+                onHourChange = { hour = it },
+                onMinuteChange = { minute = it }
             )
-            OutlinedTextField(
-                value = medicineName,
-                onValueChange = {
-                    medicineName = it
-                    errorText = ""
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("药名") }
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = dosage,
-                    onValueChange = {
-                        dosage = it
-                        errorText = ""
-                    },
-                    modifier = Modifier.weight(1f),
-                    label = { Text("剂量") }
-                )
-                OutlinedTextField(
-                    value = reason,
-                    onValueChange = { reason = it },
-                    modifier = Modifier.weight(1f),
-                    label = { Text("原因") }
-                )
+            OutlinedTextField(value = medicineName, onValueChange = { medicineName = it; errorText = "" }, modifier = Modifier.fillMaxWidth(), label = { Text("药名") })
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(value = dosage, onValueChange = { dosage = it; errorText = "" }, modifier = Modifier.weight(1f), label = { Text("剂量") })
+                OutlinedTextField(value = reason, onValueChange = { reason = it }, modifier = Modifier.weight(1f), label = { Text("原因") })
             }
-            OutlinedTextField(
-                value = note,
-                onValueChange = { note = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("备注") }
-            )
-            Text(
-                text = reminderPreview,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            OutlinedTextField(value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth(), label = { Text("备注") })
+            Text(text = reminderPreview, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (errorText.isNotBlank()) {
-                Text(
-                    text = errorText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
+                Text(text = errorText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
             Button(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
-                    val takenAt = parseRecordDateTime(recordDate, recordTime)
-                    when {
-                        medicineName.isBlank() || dosage.isBlank() -> errorText = "请先填写药名和剂量"
-                        takenAt == null -> errorText = "请输入正确日期和时间"
-                        else -> onSubmit(medicineName, dosage, reason, note, takenAt)
+                    if (medicineName.isBlank() || dosage.isBlank()) {
+                        errorText = "请先填写药名和剂量"
+                    } else {
+                        onSubmit(medicineName, dosage, reason, note, LocalDateTime.of(date, LocalTime.of(hour, minute)))
                     }
                 }
             ) {
@@ -636,29 +532,51 @@ private fun MedicineRecordSheet(
 }
 
 @Composable
-private fun RecordDateTimeFields(
-    dateValue: String,
-    onDateChange: (String) -> Unit,
-    timeValue: String,
-    onTimeChange: (String) -> Unit
+private fun SheetContent(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        OutlinedTextField(
-            value = dateValue,
-            onValueChange = onDateChange,
-            modifier = Modifier.weight(1f),
-            label = { Text("日期") },
-            placeholder = { Text("2026-06-23") }
+        Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        content()
+    }
+}
+
+@Composable
+private fun DateTimeWheel(
+    date: LocalDate,
+    hour: Int,
+    minute: Int,
+    onDateChange: (LocalDate) -> Unit,
+    onHourChange: (Int) -> Unit,
+    onMinuteChange: (Int) -> Unit
+) {
+    val dates = remember(date) { (-14..14).map { date.plusDays(it.toLong()) } }
+    val dateIndex = dates.indexOf(date).coerceAtLeast(14)
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        WheelPicker(
+            values = dates.map { it.format(DateTimeFormatter.ofPattern("M月d日")) },
+            selectedIndex = dateIndex,
+            onSelectedIndexChange = { onDateChange(dates[it]) },
+            modifier = Modifier.weight(1.4f)
         )
-        OutlinedTextField(
-            value = timeValue,
-            onValueChange = onTimeChange,
-            modifier = Modifier.weight(1f),
-            label = { Text("时间") },
-            placeholder = { Text("14:30") }
+        WheelPicker(
+            values = (0..23).map { "%02d 时".format(it) },
+            selectedIndex = hour,
+            onSelectedIndexChange = onHourChange,
+            modifier = Modifier.weight(1f)
+        )
+        WheelPicker(
+            values = (0..59).map { "%02d 分".format(it) },
+            selectedIndex = minute,
+            onSelectedIndexChange = onMinuteChange,
+            modifier = Modifier.weight(1f)
         )
     }
 }
@@ -666,21 +584,7 @@ private fun RecordDateTimeFields(
 private fun buildReminderPreview(viewModel: BabyCareViewModel): String {
     val settings = viewModel.reminderSettings
     return buildString {
-        if (settings.recheckReminderEnabled) {
-            append("复测 ")
-            append(settings.defaultRecheckAfterMinutes)
-            append(" 分钟后提醒")
-        } else {
-            append("复测提醒已关闭")
-        }
-        if (settings.medicineReminderEnabled) {
-            append("，并保留给药观察提醒")
-        }
+        append(if (settings.recheckReminderEnabled) "复测 ${settings.defaultRecheckAfterMinutes} 分钟后提醒" else "复测提醒已关闭")
+        if (settings.medicineReminderEnabled) append("，并保留给药观察提醒")
     }
-}
-
-private fun parseRecordDateTime(dateValue: String, timeValue: String): LocalDateTime? {
-    val date = runCatching { LocalDate.parse(dateValue, recordDateFormatter) }.getOrNull() ?: return null
-    val time = runCatching { LocalTime.parse(timeValue, recordTimeFormatter) }.getOrNull() ?: return null
-    return LocalDateTime.of(date, time)
 }

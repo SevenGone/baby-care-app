@@ -63,6 +63,10 @@ class BabyCareRepository(
         dao.deleteMedicineById(id)
     }
 
+    suspend fun updateBabyProfile(profile: BabyProfile) {
+        dao.upsertProfile(profile.toEntity())
+    }
+
     suspend fun updateReminderSettings(settings: ReminderSettings) {
         dao.upsertReminderSettings(settings.toEntity())
     }

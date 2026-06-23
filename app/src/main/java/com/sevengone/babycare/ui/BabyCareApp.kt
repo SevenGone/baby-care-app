@@ -41,7 +41,7 @@ import kotlinx.coroutines.launch
 private enum class RootTab(val label: String) {
     Home("首页"),
     Record("记录"),
-    Trend("趋势"),
+    Trend("统计"),
     Settings("设置")
 }
 
@@ -140,12 +140,15 @@ private fun BabyCareBottomBar(
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 16.dp, vertical = 12.dp)
+            .clip(RoundedCornerShape(34.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.38f))
+            .padding(5.dp)
     ) {
         NavigationBar(
             modifier = Modifier
                 .clip(RoundedCornerShape(28.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)),
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)),
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
             tonalElevation = 0.dp
         ) {
             items.forEach { (tab, icon) ->

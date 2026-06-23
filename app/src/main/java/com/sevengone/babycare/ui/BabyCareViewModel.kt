@@ -220,15 +220,29 @@ class BabyCareViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun updateBabyName(nickname: String) {
+        val trimmedName = nickname.trim()
+        if (trimmedName.isBlank()) return
+        viewModelScope.launch {
+            repository.updateBabyProfile(
+                babyProfile.copy(nickname = trimmedName)
+            )
+        }
+    }
+
     fun updateReminderSettings(
         medicineEnabled: Boolean = reminderSettings.medicineReminderEnabled,
-        recheckEnabled: Boolean = reminderSettings.recheckReminderEnabled
+        recheckEnabled: Boolean = reminderSettings.recheckReminderEnabled,
+        defaultRecheckAfterMinutes: Int = reminderSettings.defaultRecheckAfterMinutes,
+        quietHours: String = reminderSettings.quietHours
     ) {
         viewModelScope.launch {
             repository.updateReminderSettings(
                 reminderSettings.copy(
                     medicineReminderEnabled = medicineEnabled,
-                    recheckReminderEnabled = recheckEnabled
+                    recheckReminderEnabled = recheckEnabled,
+                    defaultRecheckAfterMinutes = defaultRecheckAfterMinutes.coerceIn(15, 720),
+                    quietHours = quietHours.ifBlank { reminderSettings.quietHours }
                 )
             )
         }
