@@ -52,7 +52,7 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    SectionHeader(title = "设置", subtitle = "提醒与基础偏好")
+                    SectionHeader(title = "设置")
                     OutlinedButton(onClick = { showEditSheet = true }) {
                         Icon(imageVector = Icons.Rounded.Edit, contentDescription = null)
                         Text("编辑")
@@ -91,7 +91,7 @@ fun SettingsScreen(
                 ) {
                     Column {
                         Text(text = "复测提醒", fontWeight = FontWeight.SemiBold)
-                        Text(text = "${settings.defaultRecheckAfterMinutes} 分钟后提醒")
+                        Text(text = "${settings.defaultRecheckAfterMinutes} 分钟")
                     }
                     Switch(
                         checked = settings.recheckReminderEnabled,

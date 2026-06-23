@@ -1,6 +1,7 @@
 package com.sevengone.babycare.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sevengone.babycare.data.MeasurementMethod
@@ -55,7 +57,6 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 private val timelineTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-private val recordDayFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("M 月 d 日")
 private val recordIsoDateFormatter: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
 private enum class RecordTab(val label: String) {
@@ -91,7 +92,7 @@ fun RecordScreen(
                 top = topSafeContentPadding(),
                 bottom = 126.dp + contentPadding.calculateBottomPadding()
             ),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             item {
                 Row(
@@ -120,7 +121,7 @@ fun RecordScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        SectionHeader(title = "记录", subtitle = "下滑查看全部历史")
+                        SectionHeader(title = "记录", subtitle = "全部历史")
                         RecordTabSwitch(currentTab = currentTab, onTabChange = { currentTab = it })
                     }
                 }
@@ -318,13 +319,21 @@ private fun DayTimelineCard(
     date: LocalDate,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    GlassCard {
+    Column(
+        modifier = Modifier.padding(bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Text(
-            text = date.format(DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日")),
+            text = date.format(DateTimeFormatter.ofPattern("M 月 d 日  EEEE")),
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
         )
-        content()
+        GlassCard(
+            paddingValues = PaddingValues(horizontal = 18.dp, vertical = 16.dp)
+        ) {
+            content()
+        }
     }
 }
 
@@ -341,45 +350,70 @@ private fun TimelineRecordItem(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top
     ) {
         Column(
-            modifier = Modifier.width(62.dp),
+            modifier = Modifier.width(60.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(text = time, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                text = time,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
             Box(
                 modifier = Modifier
-                    .padding(top = 8.dp)
+                    .padding(top = 10.dp)
                     .size(10.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
+                    .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
             )
             if (!isLast) {
                 Box(
                     modifier = Modifier
-                        .padding(top = 4.dp)
-                        .width(3.dp)
-                        .height(92.dp)
+                        .padding(top = 6.dp)
+                        .width(2.dp)
+                        .height(108.dp)
                         .clip(RoundedCornerShape(99.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
                 )
             }
         }
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(bottom = if (isLast) 0.dp else 18.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(bottom = if (isLast) 8.dp else 28.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             if (note.isNotBlank()) {
-                Text(text = note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            Text(text = accentLabel, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                text = accentLabel,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 OutlinedButton(modifier = Modifier.weight(1f), onClick = onEdit) {
                     Icon(imageVector = Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("编辑")

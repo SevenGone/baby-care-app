@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,6 +22,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,14 +36,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 
 @Composable
-fun topSafeContentPadding(extra: Dp = 26.dp): Dp {
+fun topSafeContentPadding(extra: Dp = 34.dp): Dp {
     val density = LocalDensity.current
     val statusBar = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
     return statusBar + extra
@@ -56,11 +58,11 @@ fun GlassCard(
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.62f)
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.54f)
         ),
         border = BorderStroke(
             width = 1.dp,
-            color = Color.White.copy(alpha = 0.72f)
+            color = Color.White.copy(alpha = 0.66f)
         ),
         shape = RoundedCornerShape(28.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -70,8 +72,8 @@ fun GlassCard(
                 .background(
                     Brush.linearGradient(
                         listOf(
-                            Color.White.copy(alpha = 0.48f),
-                            Color.White.copy(alpha = 0.16f)
+                            Color.White.copy(alpha = 0.34f),
+                            Color.White.copy(alpha = 0.10f)
                         )
                     )
                 )
@@ -84,6 +86,41 @@ fun GlassCard(
                 content()
             }
         }
+    }
+}
+
+@Composable
+fun GlassIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    tint: Color = MaterialTheme.colorScheme.primary,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier
+            .size(42.dp)
+            .clip(RoundedCornerShape(15.dp))
+            .background(
+                brush = Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.48f),
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.42f)
+                    )
+                )
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.74f),
+                shape = RoundedCornerShape(15.dp)
+            )
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint
+        )
     }
 }
 

@@ -7,14 +7,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Thermostat
-import androidx.compose.material.icons.rounded.TrendingUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -71,11 +70,19 @@ fun HomeScreen(
                             subtitle = targetDate.format(DateTimeFormatter.ofPattern("M 月 d 日"))
                         )
                     }
-                    IconButton(onClick = { showNameSheet = true }) {
-                        Icon(imageVector = Icons.Rounded.Edit, contentDescription = "修改宝宝名称")
-                    }
-                    IconButton(onClick = onExportClick) {
-                        Icon(imageVector = Icons.Rounded.FileDownload, contentDescription = "导出图片")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GlassIconButton(
+                            icon = Icons.Rounded.Edit,
+                            contentDescription = "修改宝宝名称",
+                            tint = MaterialTheme.colorScheme.primary,
+                            onClick = { showNameSheet = true }
+                        )
+                        GlassIconButton(
+                            icon = Icons.Rounded.Share,
+                            contentDescription = "导出图片",
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            onClick = onExportClick
+                        )
                     }
                 }
                 Row(
@@ -91,13 +98,13 @@ fun HomeScreen(
                     InlineStat(
                         title = "最高",
                         value = overview.highestTemperatureToday?.let { "${it}°C" } ?: "--",
-                        icon = Icons.Rounded.TrendingUp,
+                        icon = Icons.AutoMirrored.Rounded.ShowChart,
                         modifier = Modifier.weight(1f)
                     )
                 }
                 overview.latestMedicine?.let { medicine ->
                     Text(
-                        text = "最近给药 ${medicine.medicineName} ${medicine.takenAt.format(DateTimeFormatter.ofPattern("HH:mm"))}",
+                        text = "最近给药 ${medicine.medicineName} · ${medicine.takenAt.format(DateTimeFormatter.ofPattern("HH:mm"))}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -108,14 +115,14 @@ fun HomeScreen(
         item {
             GlassCard {
                 SectionHeader(
-                    title = "近 7 天体温",
-                    subtitle = "左右滑动查看完整时间轴"
+                    title = "近 7 天趋势",
+                    subtitle = "体温与给药时间轴"
                 )
                 TemperatureChart(
                     records = records,
                     medicineRecords = medicineRecords,
                     chartHeight = 300.dp,
-                    minChartWidth = 980.dp,
+                    minChartWidth = 1120.dp,
                     showMedicineLabels = true
                 )
             }

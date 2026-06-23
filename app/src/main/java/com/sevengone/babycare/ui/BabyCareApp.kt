@@ -1,6 +1,7 @@
 package com.sevengone.babycare.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -141,14 +143,33 @@ private fun BabyCareBottomBar(
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 16.dp, vertical = 12.dp)
             .clip(RoundedCornerShape(34.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.38f))
-            .padding(5.dp)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.24f),
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.54f)
+                    )
+                )
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(34.dp)
+            )
+            .padding(6.dp)
     ) {
         NavigationBar(
             modifier = Modifier
                 .clip(RoundedCornerShape(28.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)),
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+                        )
+                    )
+                ),
+            containerColor = Color.Transparent,
             tonalElevation = 0.dp
         ) {
             items.forEach { (tab, icon) ->

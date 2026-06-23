@@ -10,7 +10,7 @@
 - 首页交互：支持修改宝宝名称，导出按钮以右上角图标形式展示。
 - 体温记录：支持新增、编辑、删除体温记录，并通过滚轮调整日期、时间和体温。
 - 给药记录：支持新增、编辑、删除给药记录，并通过滚轮调整日期和时间。
-- 趋势图：支持横向拖动和双指缩放，固定纵坐标，横坐标展示日期与时间轴，包含正常体温范围、`38.5°C` 提醒线、给药时间点和药物名称标记。
+- 趋势图：支持单指横向拖动查看、双指缩放时间轴，固定纵坐标，横坐标展示日期与时间，包含正常体温范围、`38.5°C` 提醒线、给药时间点和药物名称标记。
 - 最近记录：按“体温 / 给药”在右侧小切换器查看，左侧连续时间轴、右侧记录详情，下滑展示全部历史数据。
 - 统计页面：展示近 7 天趋势、历史记录入口、每日测温/给药次数柱状图和每日最高温折线。
 - 本地存储：使用 Room 数据库保存在手机本地，不依赖网络。
@@ -66,16 +66,18 @@ baby-care-restore-debug-apk
 
 ## 本地打包
 
-如需在本机打包，需要安装 JDK 17 和 Android Gradle 环境，然后在项目根目录执行：
+如需在本机打包，需要安装 JDK 17 和 Android SDK。当前项目已支持把 Gradle 缓存和 SDK 都放在项目目录内，便于直接在本机编译。项目根目录执行：
 
 ```bash
-gradle assembleRelease
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home
+export GRADLE_USER_HOME="$PWD/.gradle-user-home"
+/opt/homebrew/Cellar/gradle/8.14/libexec/bin/gradle assembleDebug
 ```
 
 生成位置：
 
 ```text
-app/build/outputs/apk/release/
+app/build/outputs/apk/debug/
 ```
 
 ## 当前技术栈

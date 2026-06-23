@@ -20,6 +20,8 @@ Thumbs.db
 app/release/
 app/debug/
 backups/
+.android-sdk/
+.gradle-user-home/
 
 # Signing helper files
 app/signing/*.pem
