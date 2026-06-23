@@ -28,9 +28,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -350,33 +350,33 @@ private fun TimelineRecordItem(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.Top
     ) {
         Column(
-            modifier = Modifier.width(60.dp),
+            modifier = Modifier.width(50.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = time,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Box(
                 modifier = Modifier
-                    .padding(top = 10.dp)
-                    .size(10.dp)
+                    .padding(top = 8.dp)
+                    .size(8.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
-                    .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
+                    .border(1.5.dp, Color.White.copy(alpha = 0.8f), CircleShape)
             )
             if (!isLast) {
                 Box(
                     modifier = Modifier
                         .padding(top = 6.dp)
-                        .width(2.dp)
-                        .height(108.dp)
+                        .width(1.5.dp)
+                        .height(104.dp)
                         .clip(RoundedCornerShape(99.dp))
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
                 )
@@ -388,16 +388,45 @@ private fun TimelineRecordItem(
                 .padding(bottom = if (isLast) 8.dp else 28.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    IconButton(onClick = onEdit) {
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = "编辑",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(
+                            imageVector = Icons.Rounded.Delete,
+                            contentDescription = "删除",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
             if (note.isNotBlank()) {
                 Text(
                     text = note,
@@ -410,19 +439,6 @@ private fun TimelineRecordItem(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedButton(modifier = Modifier.weight(1f), onClick = onEdit) {
-                    Icon(imageVector = Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("编辑")
-                }
-                OutlinedButton(modifier = Modifier.weight(1f), onClick = onDelete) {
-                    Icon(imageVector = Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("删除")
-                }
-            }
         }
     }
 }
