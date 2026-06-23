@@ -6,6 +6,11 @@ on:
     branches:
       - main
       - master
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
   build-apk:
@@ -43,3 +48,21 @@ jobs:
         with:
           name: baby-care-restore-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Baby Care ${{ github.ref_name }}
+          body: |
+            宝宝体温与给药记录 App 正式版。
+
+            - 支持体温与给药记录
+            - 支持趋势图横向拖动与双指缩放
+            - 支持日期与时间轴横坐标
+            - 支持按时间轴查看全部历史记录
+            - 支持每日测温/给药次数柱状图
+            - 使用固定签名，可覆盖安装并保留本地 Room 数据
+          files: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk

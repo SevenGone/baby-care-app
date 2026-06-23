@@ -2,6 +2,8 @@ package com.sevengone.babycare.ui
 
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,7 +23,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -46,6 +50,7 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 private val chartDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("M/d")
+private val chartTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
 fun TrendScreen(
@@ -85,7 +90,7 @@ fun TrendScreen(
                 ) {
                     SectionHeader(
                         title = "统计",
-                        subtitle = if (showHistory) "全部历史记录" else "近 7 天"
+                        subtitle = if (showHistory) "全部历史记录 · 双指缩放图表" else "近 7 天 · 双指缩放图表"
                     )
                     OutlinedButton(onClick = { showHistory = !showHistory }) {
                         Icon(imageVector = Icons.Rounded.History, contentDescription = null)
@@ -95,8 +100,8 @@ fun TrendScreen(
                 TemperatureChart(
                     records = records,
                     medicineRecords = medicineRecords,
-                    chartHeight = 320.dp,
-                    minChartWidth = if (showHistory) 1280.dp else 980.dp,
+                    chartHeight = 340.dp,
+                    minChartWidth = if (showHistory) 1320.dp else 1040.dp,
                     showMedicineLabels = true
                 )
             }
@@ -104,8 +109,8 @@ fun TrendScreen(
 
         item {
             GlassCard {
-                SectionHeader(title = "每日概览")
-                DailyStatsList(
+                SectionHeader(title = "每日概览", subtitle = "测温与给药次数")
+                DailyStatsBarChart(
                     startDate = startDate,
                     endDate = endDate,
                     records = records,
@@ -150,10 +155,14 @@ fun TemperatureChart(
         return
     }
 
+    var zoom by remember { mutableFloatStateOf(1f) }
+    val transformState = rememberTransformableState { zoomChange, _, _ ->
+        zoom = (zoom * zoomChange).coerceIn(0.8f, 3.2f)
+    }
     val startDate = records.first().measuredAt.toLocalDate()
     val endDate = records.last().measuredAt.toLocalDate()
     val days = Duration.between(startDate.atStartOfDay(), endDate.plusDays(1).atStartOfDay()).toDays().coerceAtLeast(1)
-    val dynamicWidth = maxOf(minChartWidth.value, (days * 150f), (records.size * 84f), (medicineRecords.size * 88f)).dp
+    val dynamicWidth = (maxOf(minChartWidth.value, (days * 170f), (records.size * 92f), (medicineRecords.size * 92f)) * zoom).dp
     val yAxisWidth = 58.dp
     val lineColor = MaterialTheme.colorScheme.error.copy(alpha = 0.92f)
     val medicineColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f)
@@ -169,16 +178,12 @@ fun TemperatureChart(
                 .height(chartHeight)
         ) {
             val topPadding = 28.dp.toPx()
-            val bottomPadding = 44.dp.toPx()
+            val bottomPadding = 58.dp.toPx()
             val plotHeight = size.height - topPadding - bottomPadding
-            val minTemp = 36f
-            val maxTemp = 39.5f
-
             fun mapY(value: Float): Float {
-                val ratio = (value - minTemp) / (maxTemp - minTemp)
-                return topPadding + plotHeight - (ratio * plotHeight)
+                val ratio = (value - 36f) / (39.5f - 36f)
+                return topPadding + plotHeight - ratio * plotHeight
             }
-
             listOf(36f, 36.5f, 37f, 37.5f, 38f, 38.5f, 39f).forEach { temp ->
                 val y = mapY(temp)
                 drawContext.canvas.nativeCanvas.drawText(
@@ -198,6 +203,7 @@ fun TemperatureChart(
             modifier = Modifier
                 .weight(1f)
                 .horizontalScroll(rememberScrollState())
+                .transformable(transformState)
         ) {
             Canvas(
                 modifier = Modifier
@@ -207,11 +213,9 @@ fun TemperatureChart(
                 val leftPadding = 8.dp.toPx()
                 val rightPadding = 28.dp.toPx()
                 val topPadding = 28.dp.toPx()
-                val bottomPadding = 44.dp.toPx()
+                val bottomPadding = 58.dp.toPx()
                 val chartWidth = size.width - leftPadding - rightPadding
                 val plotHeight = size.height - topPadding - bottomPadding
-                val minTemp = 36f
-                val maxTemp = 39.5f
                 val timelineStart = startDate.atStartOfDay()
                 val totalMinutes = Duration.between(timelineStart, endDate.plusDays(1).atStartOfDay()).toMinutes().toFloat()
 
@@ -221,8 +225,8 @@ fun TemperatureChart(
                 }
 
                 fun mapY(value: Float): Float {
-                    val ratio = (value - minTemp) / (maxTemp - minTemp)
-                    return topPadding + plotHeight - (ratio * plotHeight)
+                    val ratio = (value - 36f) / (39.5f - 36f)
+                    return topPadding + plotHeight - ratio * plotHeight
                 }
 
                 drawRoundRect(
@@ -236,17 +240,12 @@ fun TemperatureChart(
                     .takeWhile { !it.isAfter(endDate.plusDays(1)) }
                     .forEach { date ->
                         val x = mapX(date.atStartOfDay())
-                        drawLine(
-                            color = gridColor,
-                            start = Offset(x, topPadding),
-                            end = Offset(x, size.height - bottomPadding),
-                            strokeWidth = 1.4f
-                        )
+                        drawLine(gridColor, Offset(x, topPadding), Offset(x, size.height - bottomPadding), strokeWidth = 1.4f)
                         if (!date.isAfter(endDate)) {
                             drawContext.canvas.nativeCanvas.drawText(
                                 date.format(chartDateFormatter),
                                 x + 8.dp.toPx(),
-                                size.height - 13.dp.toPx(),
+                                size.height - 31.dp.toPx(),
                                 Paint().apply {
                                     color = textColor.toArgbCompat()
                                     textSize = 11.dp.toPx()
@@ -254,6 +253,29 @@ fun TemperatureChart(
                                 }
                             )
                         }
+                    }
+
+                val hourStep = if (zoom > 2f) 3L else 6L
+                generateSequence(timelineStart) { it.plusHours(hourStep) }
+                    .takeWhile { !it.isAfter(endDate.plusDays(1).atStartOfDay()) }
+                    .forEach { time ->
+                        val x = mapX(time)
+                        drawLine(
+                            color = gridColor.copy(alpha = 0.55f),
+                            start = Offset(x, topPadding),
+                            end = Offset(x, size.height - bottomPadding),
+                            strokeWidth = 1f
+                        )
+                        drawContext.canvas.nativeCanvas.drawText(
+                            time.format(chartTimeFormatter),
+                            x + 4.dp.toPx(),
+                            size.height - 12.dp.toPx(),
+                            Paint().apply {
+                                color = textColor.copy(alpha = 0.72f).toArgbCompat()
+                                textSize = 9.dp.toPx()
+                                isAntiAlias = true
+                            }
+                        )
                     }
 
                 listOf(36f, 36.5f, 37f, 37.5f, 38f, 38.5f, 39f).forEach { temp ->
@@ -283,28 +305,19 @@ fun TemperatureChart(
                     val point = Offset(mapX(record.measuredAt), mapY(record.temperatureCelsius))
                     if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
                 }
-                drawPath(
-                    path = path,
-                    color = lineColor,
-                    style = Stroke(width = 2.4.dp.toPx(), cap = StrokeCap.Round)
-                )
+                drawPath(path, lineColor, style = Stroke(width = 2.4.dp.toPx(), cap = StrokeCap.Round))
 
                 records.forEach { record ->
                     val center = Offset(mapX(record.measuredAt), mapY(record.temperatureCelsius))
-                    drawCircle(color = Color.White, radius = 4.2.dp.toPx(), center = center)
-                    drawCircle(color = lineColor, radius = 3.dp.toPx(), center = center)
+                    drawCircle(Color.White, radius = 4.2.dp.toPx(), center = center)
+                    drawCircle(lineColor, radius = 3.dp.toPx(), center = center)
                 }
 
                 medicineRecords.forEach { medicine ->
                     val markerX = mapX(medicine.takenAt)
-                    drawLine(
-                        color = medicineColor.copy(alpha = 0.18f),
-                        start = Offset(markerX, topPadding),
-                        end = Offset(markerX, size.height - bottomPadding + 6.dp.toPx()),
-                        strokeWidth = 1.6f
-                    )
+                    drawLine(medicineColor.copy(alpha = 0.18f), Offset(markerX, topPadding), Offset(markerX, size.height - bottomPadding + 6.dp.toPx()), strokeWidth = 1.6f)
                     val markerY = topPadding + 18.dp.toPx()
-                    drawCircle(color = medicineColor, radius = 4.8.dp.toPx(), center = Offset(markerX, markerY))
+                    drawCircle(medicineColor, radius = 4.8.dp.toPx(), center = Offset(markerX, markerY))
                     if (showMedicineLabels) {
                         drawContext.canvas.nativeCanvas.drawText(
                             medicine.medicineName,
@@ -324,7 +337,7 @@ fun TemperatureChart(
 }
 
 @Composable
-private fun DailyStatsList(
+private fun DailyStatsBarChart(
     startDate: LocalDate,
     endDate: LocalDate,
     records: List<TemperatureRecord>,
@@ -333,26 +346,69 @@ private fun DailyStatsList(
     val dates = generateSequence(startDate) { it.plusDays(1) }
         .takeWhile { !it.isAfter(endDate) }
         .toList()
-        .reversed()
+    val values = dates.map { date ->
+        Triple(
+            date,
+            records.count { it.measuredAt.toLocalDate() == date },
+            medicineRecords.count { it.takenAt.toLocalDate() == date }
+        )
+    }
+    val tempColor = MaterialTheme.colorScheme.error.copy(alpha = 0.72f)
+    val medColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.72f)
+    val textColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val maxCount = max(1, values.maxOfOrNull { max(it.second, it.third) } ?: 1)
 
-    dates.forEach { date ->
-        val temps = records.filter { it.measuredAt.toLocalDate() == date }
-        val meds = medicineRecords.filter { it.takenAt.toLocalDate() == date }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = date.format(DateTimeFormatter.ofPattern("M 月 d 日")),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(220.dp)
+    ) {
+        val leftPadding = 26.dp.toPx()
+        val rightPadding = 10.dp.toPx()
+        val topPadding = 18.dp.toPx()
+        val bottomPadding = 44.dp.toPx()
+        val chartWidth = size.width - leftPadding - rightPadding
+        val chartHeight = size.height - topPadding - bottomPadding
+        val groupWidth = chartWidth / values.size.coerceAtLeast(1)
+        val barWidth = (groupWidth * 0.24f).coerceAtMost(18.dp.toPx())
+
+        values.forEachIndexed { index, item ->
+            val groupStart = leftPadding + index * groupWidth
+            val tempHeight = chartHeight * item.second / maxCount
+            val medHeight = chartHeight * item.third / maxCount
+            drawRoundRect(
+                color = tempColor,
+                topLeft = Offset(groupStart + groupWidth * 0.25f, topPadding + chartHeight - tempHeight),
+                size = Size(barWidth, tempHeight),
+                cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx())
             )
-            Text(
-                text = "测温 ${temps.size} 次 · 给药 ${meds.size} 次 · 最高 ${temps.maxOfOrNull { it.temperatureCelsius }?.let { "${it}°C" } ?: "--"}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            drawRoundRect(
+                color = medColor,
+                topLeft = Offset(groupStart + groupWidth * 0.52f, topPadding + chartHeight - medHeight),
+                size = Size(barWidth, medHeight),
+                cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx())
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                item.first.format(chartDateFormatter),
+                groupStart + 4.dp.toPx(),
+                size.height - 10.dp.toPx(),
+                Paint().apply {
+                    color = textColor.toArgbCompat()
+                    textSize = 10.dp.toPx()
+                    isAntiAlias = true
+                }
             )
         }
+        drawContext.canvas.nativeCanvas.drawText(
+            "红=测温  橙=给药",
+            leftPadding,
+            12.dp.toPx(),
+            Paint().apply {
+                color = textColor.toArgbCompat()
+                textSize = 11.dp.toPx()
+                isAntiAlias = true
+            }
+        )
     }
 }
 
@@ -381,8 +437,6 @@ private fun DailyHighChart(
         val bottomPadding = 34.dp.toPx()
         val chartWidth = size.width - leftPadding - rightPadding
         val chartHeight = size.height - topPadding - bottomPadding
-        val minTemp = 36f
-        val maxTemp = 39.5f
 
         fun mapX(index: Int): Float {
             val denominator = max(1, values.lastIndex)
@@ -390,7 +444,7 @@ private fun DailyHighChart(
         }
 
         fun mapY(value: Float): Float {
-            val ratio = (value - minTemp) / (maxTemp - minTemp)
+            val ratio = (value - 36f) / (39.5f - 36f)
             return topPadding + chartHeight - ratio * chartHeight
         }
 

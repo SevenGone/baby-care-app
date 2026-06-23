@@ -19,8 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ChevronLeft
-import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.MedicalServices
@@ -29,7 +27,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -79,16 +76,11 @@ fun RecordScreen(
     contentPadding: PaddingValues,
     onSaved: (String) -> Unit
 ) {
-    val availableDates = viewModel.availableDates()
-    var selectedDateValue by rememberSaveable { mutableStateOf(availableDates.first().toString()) }
     var currentTab by rememberSaveable { mutableStateOf(RecordTab.Temperature) }
     var sheetState by remember { mutableStateOf<RecordSheetState?>(null) }
-    val selectedDate = availableDates.firstOrNull { it.toString() == selectedDateValue } ?: availableDates.first()
     val temperatureRecords = viewModel.temperatureRecords
-        .filter { it.measuredAt.toLocalDate() == selectedDate }
         .sortedByDescending { it.measuredAt }
     val medicineRecords = viewModel.medicineRecords
-        .filter { it.takenAt.toLocalDate() == selectedDate }
         .sortedByDescending { it.takenAt }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -128,14 +120,9 @@ fun RecordScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        SectionHeader(title = "记录", subtitle = selectedDate.format(recordDayFormatter))
+                        SectionHeader(title = "记录", subtitle = "下滑查看全部历史")
                         RecordTabSwitch(currentTab = currentTab, onTabChange = { currentTab = it })
                     }
-                    DateStepper(
-                        selectedDate = selectedDate,
-                        availableDates = availableDates,
-                        onDateSelected = { selectedDateValue = it.toString() }
-                    )
                 }
             }
 
@@ -247,38 +234,6 @@ private fun RecordTabSwitch(
 }
 
 @Composable
-private fun DateStepper(
-    selectedDate: LocalDate,
-    availableDates: List<LocalDate>,
-    onDateSelected: (LocalDate) -> Unit
-) {
-    val index = availableDates.indexOf(selectedDate).coerceAtLeast(0)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(
-            enabled = index < availableDates.lastIndex,
-            onClick = { onDateSelected(availableDates[index + 1]) }
-        ) {
-            Icon(imageVector = Icons.Rounded.ChevronLeft, contentDescription = "上一天")
-        }
-        Text(
-            text = selectedDate.format(DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日")),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
-        IconButton(
-            enabled = index > 0,
-            onClick = { onDateSelected(availableDates[index - 1]) }
-        ) {
-            Icon(imageVector = Icons.Rounded.ChevronRight, contentDescription = "下一天")
-        }
-    }
-}
-
-@Composable
 private fun QuickEntryButton(
     title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -297,22 +252,20 @@ private fun TemperatureTimeline(
     onEdit: (TemperatureRecord) -> Unit,
     onDelete: (TemperatureRecord) -> Unit
 ) {
-    GlassCard {
-        if (records.isEmpty()) {
-            Text(
-                text = "这一天还没有体温记录",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            records.forEachIndexed { index, record ->
+    if (records.isEmpty()) {
+        EmptyTimelineCard("还没有体温记录")
+        return
+    }
+    records.groupBy { it.measuredAt.toLocalDate() }.forEach { (date, dayRecords) ->
+        DayTimelineCard(date = date) {
+            dayRecords.forEachIndexed { index, record ->
                 TimelineRecordItem(
                     time = record.measuredAt.format(timelineTimeFormatter),
                     title = "${record.temperatureCelsius}°C",
                     subtitle = "${record.method.label} · ${record.mood}",
                     note = record.note,
                     accentLabel = "体温",
-                    isLast = index == records.lastIndex,
+                    isLast = index == dayRecords.lastIndex,
                     onEdit = { onEdit(record) },
                     onDelete = { onDelete(record) }
                 )
@@ -327,27 +280,51 @@ private fun MedicineTimeline(
     onEdit: (MedicineRecord) -> Unit,
     onDelete: (MedicineRecord) -> Unit
 ) {
-    GlassCard {
-        if (records.isEmpty()) {
-            Text(
-                text = "这一天还没有给药记录",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            records.forEachIndexed { index, record ->
+    if (records.isEmpty()) {
+        EmptyTimelineCard("还没有给药记录")
+        return
+    }
+    records.groupBy { it.takenAt.toLocalDate() }.forEach { (date, dayRecords) ->
+        DayTimelineCard(date = date) {
+            dayRecords.forEachIndexed { index, record ->
                 TimelineRecordItem(
                     time = record.takenAt.format(timelineTimeFormatter),
                     title = record.medicineName,
                     subtitle = "${record.dosage} · ${record.reason}",
                     note = record.note,
                     accentLabel = "给药",
-                    isLast = index == records.lastIndex,
+                    isLast = index == dayRecords.lastIndex,
                     onEdit = { onEdit(record) },
                     onDelete = { onDelete(record) }
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun EmptyTimelineCard(text: String) {
+    GlassCard {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun DayTimelineCard(
+    date: LocalDate,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    GlassCard {
+        Text(
+            text = date.format(DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日")),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        content()
     }
 }
 
