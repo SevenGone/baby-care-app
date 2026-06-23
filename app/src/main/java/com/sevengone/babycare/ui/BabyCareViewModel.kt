@@ -253,6 +253,13 @@ class BabyCareViewModel(application: Application) : AndroidViewModel(application
         return listOfNotNull(latestTemperatureDate, latestMedicineDate).maxOrNull() ?: LocalDate.now()
     }
 
+    fun availableDates(): List<LocalDate> {
+        return buildSet {
+            addAll(temperatureRecords.map { it.measuredAt.toLocalDate() })
+            addAll(medicineRecords.map { it.takenAt.toLocalDate() })
+        }.sortedDescending().ifEmpty { listOf(LocalDate.now()) }
+    }
+
     fun timelineFor(date: LocalDate = LocalDate.now()): List<TimelineEvent> {
         val timeline = buildList {
             addAll(temperatureRecords.filter { it.measuredAt.toLocalDate() == date }.map(TimelineEvent::Temperature))

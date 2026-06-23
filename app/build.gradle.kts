@@ -8,12 +8,22 @@ android {
     namespace = "com.sevengone.babycare"
     compileSdk = 35
 
+    signingConfigs {
+        create("babycare") {
+            storeFile = file("signing/baby-care-upload.p12")
+            storePassword = "babycare123"
+            keyAlias = "babycare"
+            keyPassword = "babycare123"
+            storeType = "PKCS12"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.sevengone.babycare"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -22,8 +32,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("babycare")
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("babycare")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

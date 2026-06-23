@@ -1,5 +1,7 @@
 package com.sevengone.babycare.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -10,9 +12,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -38,6 +42,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -52,7 +57,13 @@ import java.time.format.DateTimeFormatter
 
 private val recordDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 private val recordTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-private val timelineFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("MM-dd HH:mm")
+private val timelineTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val recordDayFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("M 月 d 日")
+
+private enum class RecordTab(val label: String) {
+    Temperature("体温"),
+    Medicine("给药")
+}
 
 private sealed interface RecordSheetState {
     data object NewTemperature : RecordSheetState
@@ -67,9 +78,18 @@ fun RecordScreen(
     contentPadding: PaddingValues,
     onSaved: (String) -> Unit
 ) {
-    val targetDate = viewModel.focusDate()
-    val recentTimeline = viewModel.timelineFor(targetDate).take(10)
+    val availableDates = viewModel.availableDates()
+    var selectedDateValue by rememberSaveable { mutableStateOf(availableDates.first().toString()) }
+    var currentTab by rememberSaveable { mutableStateOf(RecordTab.Temperature) }
     var sheetState by remember { mutableStateOf<RecordSheetState?>(null) }
+
+    val selectedDate = availableDates.firstOrNull { it.toString() == selectedDateValue } ?: availableDates.first()
+    val temperatureRecords = viewModel.temperatureRecords
+        .filter { it.measuredAt.toLocalDate() == selectedDate }
+        .sortedByDescending { it.measuredAt }
+    val medicineRecords = viewModel.medicineRecords
+        .filter { it.takenAt.toLocalDate() == selectedDate }
+        .sortedByDescending { it.takenAt }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -82,126 +102,84 @@ fun RecordScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                GlassCard {
-                    Text(
-                        text = "新增记录",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    QuickEntryButton(
+                        title = "记录体温",
+                        icon = Icons.Rounded.Thermostat,
+                        modifier = Modifier.weight(1f),
+                        onClick = { sheetState = RecordSheetState.NewTemperature }
                     )
-                    Text(
-                        text = "体温和给药都支持直接录入具体日期时间，补记和修正会更方便。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    QuickEntryButton(
+                        title = "记录给药",
+                        icon = Icons.Rounded.MedicalServices,
+                        modifier = Modifier.weight(1f),
+                        onClick = { sheetState = RecordSheetState.NewMedicine }
                     )
-                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                        val compact = maxWidth < 420.dp
-                        if (compact) {
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                QuickEntryCard(
-                                    title = "记录体温",
-                                    subtitle = "数值、方式、状态、时间",
-                                    icon = {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Thermostat,
-                                            contentDescription = "记录体温",
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    onClick = { sheetState = RecordSheetState.NewTemperature }
-                                )
-                                QuickEntryCard(
-                                    title = "记录给药",
-                                    subtitle = "药名、剂量、原因、时间",
-                                    icon = {
-                                        Icon(
-                                            imageVector = Icons.Rounded.MedicalServices,
-                                            contentDescription = "记录给药",
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    onClick = { sheetState = RecordSheetState.NewMedicine }
-                                )
-                            }
-                        } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                QuickEntryCard(
-                                    title = "记录体温",
-                                    subtitle = "数值、方式、状态、时间",
-                                    icon = {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Thermostat,
-                                            contentDescription = "记录体温",
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    onClick = { sheetState = RecordSheetState.NewTemperature }
-                                )
-                                QuickEntryCard(
-                                    title = "记录给药",
-                                    subtitle = "药名、剂量、原因、时间",
-                                    icon = {
-                                        Icon(
-                                            imageVector = Icons.Rounded.MedicalServices,
-                                            contentDescription = "记录给药",
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    onClick = { sheetState = RecordSheetState.NewMedicine }
-                                )
-                            }
-                        }
-                    }
                 }
             }
 
             item {
                 GlassCard {
-                    SectionHeader(
-                        title = "最近记录",
-                        subtitle = "${targetDate.format(DateTimeFormatter.ofPattern("M 月 d 日"))} · 支持编辑和删除"
+                    SectionHeader(title = "记录")
+                    RecordDateFilterRow(
+                        dates = availableDates,
+                        selectedDate = selectedDate,
+                        onDateSelected = { selectedDateValue = it.toString() }
                     )
-                    Text(
-                        text = "编辑时可以直接修改记录时间。删除给药记录时，会一起取消这条记录关联的提醒。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        RecordTab.entries.forEach { tab ->
+                            FilterChip(
+                                selected = currentTab == tab,
+                                onClick = { currentTab = tab },
+                                label = { Text(tab.label) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
                 }
             }
 
-            items(recentTimeline) { event ->
-                when (event) {
-                    is TimelineEvent.Temperature -> EditableTimelineCard(
-                        title = "${event.record.temperatureCelsius}°C · ${event.record.method.label}",
-                        subtitle = event.record.mood,
-                        note = event.record.note,
-                        time = event.record.measuredAt.format(timelineFormatter),
-                        tag = "体温",
-                        onEdit = { sheetState = RecordSheetState.EditTemperature(event.record) },
-                        onDelete = {
-                            viewModel.deleteTemperatureRecord(event.record.id)
-                            onSaved("体温记录已删除")
-                        }
-                    )
+            when (currentTab) {
+                RecordTab.Temperature -> {
+                    items(temperatureRecords) { record ->
+                        TimelineRecordCard(
+                            time = record.measuredAt.format(timelineTimeFormatter),
+                            title = "${record.temperatureCelsius}°C",
+                            subtitle = record.method.label,
+                            detail = record.mood,
+                            note = record.note,
+                            accentLabel = "体温",
+                            onEdit = { sheetState = RecordSheetState.EditTemperature(record) },
+                            onDelete = {
+                                viewModel.deleteTemperatureRecord(record.id)
+                                onSaved("体温记录已删除")
+                            }
+                        )
+                    }
+                }
 
-                    is TimelineEvent.Medicine -> EditableTimelineCard(
-                        title = event.record.medicineName,
-                        subtitle = "${event.record.dosage} · ${event.record.reason}",
-                        note = event.record.note,
-                        time = event.record.takenAt.format(timelineFormatter),
-                        tag = "给药",
-                        onEdit = { sheetState = RecordSheetState.EditMedicine(event.record) },
-                        onDelete = {
-                            viewModel.deleteMedicineRecord(event.record.id)
-                            onSaved("给药记录已删除，关联提醒已取消")
-                        }
-                    )
+                RecordTab.Medicine -> {
+                    items(medicineRecords) { record ->
+                        TimelineRecordCard(
+                            time = record.takenAt.format(timelineTimeFormatter),
+                            title = record.medicineName,
+                            subtitle = record.dosage,
+                            detail = record.reason,
+                            note = record.note,
+                            accentLabel = "给药",
+                            onEdit = { sheetState = RecordSheetState.EditMedicine(record) },
+                            onDelete = {
+                                viewModel.deleteMedicineRecord(record.id)
+                                onSaved("给药记录已删除，关联提醒已取消")
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -211,8 +189,8 @@ fun RecordScreen(
 
             RecordSheetState.NewTemperature -> {
                 TemperatureRecordSheet(
-                    title = "新增体温记录",
-                    submitLabel = "保存体温记录",
+                    title = "体温",
+                    submitLabel = "保存",
                     initialMethod = MeasurementMethod.Ear,
                     initialMeasuredAt = LocalDateTime.now(),
                     onDismiss = { sheetState = null },
@@ -232,8 +210,8 @@ fun RecordScreen(
 
             RecordSheetState.NewMedicine -> {
                 MedicineRecordSheet(
-                    title = "新增给药记录",
-                    submitLabel = "保存给药记录",
+                    title = "给药",
+                    submitLabel = "保存",
                     reminderPreview = buildReminderPreview(viewModel),
                     initialTakenAt = LocalDateTime.now(),
                     onDismiss = { sheetState = null },
@@ -253,8 +231,8 @@ fun RecordScreen(
 
             is RecordSheetState.EditTemperature -> {
                 TemperatureRecordSheet(
-                    title = "编辑体温记录",
-                    submitLabel = "保存修改",
+                    title = "编辑体温",
+                    submitLabel = "保存",
                     initialTemperature = currentSheet.record.temperatureCelsius.toString(),
                     initialMethod = currentSheet.record.method,
                     initialMood = currentSheet.record.mood,
@@ -278,14 +256,14 @@ fun RecordScreen(
 
             is RecordSheetState.EditMedicine -> {
                 MedicineRecordSheet(
-                    title = "编辑给药记录",
-                    submitLabel = "保存修改",
+                    title = "编辑给药",
+                    submitLabel = "保存",
                     initialMedicineName = currentSheet.record.medicineName,
                     initialDosage = currentSheet.record.dosage,
                     initialReason = currentSheet.record.reason,
                     initialNote = currentSheet.record.note,
                     initialTakenAt = currentSheet.record.takenAt,
-                    reminderPreview = "保存后会按当前提醒设置重新安排这条给药记录的后续提醒。",
+                    reminderPreview = "保存后会按当前提醒设置重新安排提醒。",
                     onDismiss = { sheetState = null },
                     onSubmit = { name, dosage, reason, note, takenAt ->
                         viewModel.updateMedicineRecord(
@@ -297,7 +275,7 @@ fun RecordScreen(
                             takenAt = takenAt
                         )
                         sheetState = null
-                        onSaved("给药记录已更新，关联提醒已重排")
+                        onSaved("给药记录已更新")
                     }
                 )
             }
@@ -306,129 +284,130 @@ fun RecordScreen(
 }
 
 @Composable
-private fun QuickEntryCard(
-    title: String,
-    subtitle: String,
-    icon: @Composable () -> Unit,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
+private fun RecordDateFilterRow(
+    dates: List<LocalDate>,
+    selectedDate: LocalDate,
+    onDateSelected: (LocalDate) -> Unit
 ) {
-    GlassCard(
-        modifier = modifier,
-        paddingValues = PaddingValues(16.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            icon()
-        }
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Button(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = onClick
-        ) {
-            Text("打开录入面板")
+        dates.forEach { date ->
+            FilterChip(
+                selected = selectedDate == date,
+                onClick = { onDateSelected(date) },
+                label = { Text(date.format(recordDayFormatter)) }
+            )
         }
     }
 }
 
 @Composable
-private fun EditableTimelineCard(
+private fun QuickEntryButton(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Button(
+        modifier = modifier,
+        onClick = onClick
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+        )
+        Text(title)
+    }
+}
+
+@Composable
+private fun TimelineRecordCard(
+    time: String,
     title: String,
     subtitle: String,
+    detail: String,
     note: String,
-    time: String,
-    tag: String,
+    accentLabel: String,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     GlassCard {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.Top
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Text(
-                    text = subtitle,
+                    text = time,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Box(
+                    modifier = Modifier
+                        .padding(top = 6.dp)
+                        .width(2.dp)
+                        .weight(1f, fill = false)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "$subtitle · $detail",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (note.isNotBlank()) {
+                    Text(
+                        text = note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    text = note,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = accentLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(time, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                Text(tag, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            }
         }
-
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-            val compact = maxWidth < 420.dp
-            if (compact) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = onEdit
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Edit,
-                            contentDescription = "编辑",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text("编辑")
-                    }
-                    OutlinedButton(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = onDelete
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Delete,
-                            contentDescription = "删除",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text("删除")
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    OutlinedButton(
-                        modifier = Modifier.weight(1f),
-                        onClick = onEdit
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Edit,
-                            contentDescription = "编辑",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text("编辑")
-                    }
-                    OutlinedButton(
-                        modifier = Modifier.weight(1f),
-                        onClick = onDelete
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Delete,
-                            contentDescription = "删除",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text("删除")
-                    }
-                }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            OutlinedButton(
+                modifier = Modifier.weight(1f),
+                onClick = onEdit
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Edit,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text("编辑")
+            }
+            OutlinedButton(
+                modifier = Modifier.weight(1f),
+                onClick = onDelete
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Delete,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text("删除")
             }
         }
     }
@@ -463,12 +442,7 @@ private fun TemperatureRecordSheet(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text(text = title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(
-                text = "支持直接录入或修正测量时间，保存后会立即反映到时间线和趋势图。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             RecordDateTimeFields(
                 dateValue = recordDate,
                 onDateChange = {
@@ -488,36 +462,40 @@ private fun TemperatureRecordSheet(
                     errorText = ""
                 },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("体温值（°C）") },
-                placeholder = { Text("例如：38.1") },
+                label = { Text("体温") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
-            MeasurementMethod.entries.chunked(2).forEach { rowItems ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    rowItems.forEach { item ->
-                        FilterChip(
-                            selected = method == item,
-                            onClick = { method = item },
-                            label = { Text(item.label) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    if (rowItems.size == 1) {
-                        Box(modifier = Modifier.weight(1f))
-                    }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                MeasurementMethod.entries.take(2).forEach { item ->
+                    FilterChip(
+                        selected = method == item,
+                        onClick = { method = item },
+                        label = { Text(item.label) },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
-            QuickChoiceRow(
-                options = listOf("精神好", "精神一般", "哭闹", "想睡")
-            ) { mood = it }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                MeasurementMethod.entries.drop(2).forEach { item ->
+                    FilterChip(
+                        selected = method == item,
+                        onClick = { method = item },
+                        label = { Text(item.label) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
             OutlinedTextField(
                 value = mood,
                 onValueChange = { mood = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("宝宝状态") }
+                label = { Text("状态") }
             )
             OutlinedTextField(
                 value = note,
@@ -538,19 +516,13 @@ private fun TemperatureRecordSheet(
                     val value = temperature.toFloatOrNull()
                     val measuredAt = parseRecordDateTime(recordDate, recordTime)
                     when {
-                        value == null -> errorText = "请输入正确的体温值"
-                        measuredAt == null -> errorText = "请输入正确的日期和时间，例如 2026-06-22 和 14:30"
+                        value == null -> errorText = "请输入正确体温"
+                        measuredAt == null -> errorText = "请输入正确日期和时间"
                         else -> onSubmit(value, method, mood, note, measuredAt)
                     }
                 }
             ) {
                 Text(submitLabel)
-            }
-            TextButton(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onDismiss
-            ) {
-                Text("取消")
             }
         }
     }
@@ -586,12 +558,7 @@ private fun MedicineRecordSheet(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text(text = title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(
-                text = "给药记录支持补记时间，保存后提醒会按新时间重新安排。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             RecordDateTimeFields(
                 dateValue = recordDate,
                 onDateChange = {
@@ -604,11 +571,6 @@ private fun MedicineRecordSheet(
                     errorText = ""
                 }
             )
-            QuickChoiceRow(
-                options = listOf("布洛芬混悬液", "对乙酰氨基酚", "口服补液", "其他")
-            ) { selected ->
-                medicineName = if (selected == "其他") "" else selected
-            }
             OutlinedTextField(
                 value = medicineName,
                 onValueChange = {
@@ -616,63 +578,38 @@ private fun MedicineRecordSheet(
                     errorText = ""
                 },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("药品名称") }
+                label = { Text("药名") }
             )
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val compact = maxWidth < 420.dp
-                if (compact) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(
-                            value = dosage,
-                            onValueChange = {
-                                dosage = it
-                                errorText = ""
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("剂量") }
-                        )
-                        OutlinedTextField(
-                            value = reason,
-                            onValueChange = { reason = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("原因") }
-                        )
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = dosage,
-                            onValueChange = {
-                                dosage = it
-                                errorText = ""
-                            },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("剂量") }
-                        )
-                        OutlinedTextField(
-                            value = reason,
-                            onValueChange = { reason = it },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("原因") }
-                        )
-                    }
-                }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = dosage,
+                    onValueChange = {
+                        dosage = it
+                        errorText = ""
+                    },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("剂量") }
+                )
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = { reason = it },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("原因") }
+                )
             }
-            QuickChoiceRow(
-                options = listOf("退热", "补液", "医生交代", "睡前观察")
-            ) { reason = it }
             OutlinedTextField(
                 value = note,
                 onValueChange = { note = it },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("备注") }
             )
-            SaveHintCard(
-                title = "保存后提醒预览",
-                message = reminderPreview
+            Text(
+                text = reminderPreview,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (errorText.isNotBlank()) {
                 Text(
@@ -686,19 +623,13 @@ private fun MedicineRecordSheet(
                 onClick = {
                     val takenAt = parseRecordDateTime(recordDate, recordTime)
                     when {
-                        medicineName.isBlank() || dosage.isBlank() -> errorText = "请先填写药品名称和剂量"
-                        takenAt == null -> errorText = "请输入正确的日期和时间，例如 2026-06-22 和 14:30"
+                        medicineName.isBlank() || dosage.isBlank() -> errorText = "请先填写药名和剂量"
+                        takenAt == null -> errorText = "请输入正确日期和时间"
                         else -> onSubmit(medicineName, dosage, reason, note, takenAt)
                     }
                 }
             ) {
                 Text(submitLabel)
-            }
-            TextButton(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onDismiss
-            ) {
-                Text("取消")
             }
         }
     }
@@ -711,91 +642,23 @@ private fun RecordDateTimeFields(
     timeValue: String,
     onTimeChange: (String) -> Unit
 ) {
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val compact = maxWidth < 420.dp
-        if (compact) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = dateValue,
-                    onValueChange = onDateChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("日期") },
-                    placeholder = { Text("2026-06-22") }
-                )
-                OutlinedTextField(
-                    value = timeValue,
-                    onValueChange = onTimeChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("时间") },
-                    placeholder = { Text("14:30") }
-                )
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = dateValue,
-                    onValueChange = onDateChange,
-                    modifier = Modifier.weight(1f),
-                    label = { Text("日期") },
-                    placeholder = { Text("2026-06-22") }
-                )
-                OutlinedTextField(
-                    value = timeValue,
-                    onValueChange = onTimeChange,
-                    modifier = Modifier.weight(1f),
-                    label = { Text("时间") },
-                    placeholder = { Text("14:30") }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun QuickChoiceRow(
-    options: List<String>,
-    onSelect: (String) -> Unit
-) {
-    options.chunked(2).forEach { rowItems ->
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            rowItems.forEach { option ->
-                FilterChip(
-                    selected = false,
-                    onClick = { onSelect(option) },
-                    label = { Text(option) },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            if (rowItems.size == 1) {
-                Box(modifier = Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun SaveHintCard(
-    title: String,
-    message: String
-) {
-    GlassCard(
-        paddingValues = PaddingValues(16.dp)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
+        OutlinedTextField(
+            value = dateValue,
+            onValueChange = onDateChange,
+            modifier = Modifier.weight(1f),
+            label = { Text("日期") },
+            placeholder = { Text("2026-06-23") }
         )
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        OutlinedTextField(
+            value = timeValue,
+            onValueChange = onTimeChange,
+            modifier = Modifier.weight(1f),
+            label = { Text("时间") },
+            placeholder = { Text("14:30") }
         )
     }
 }
@@ -803,16 +666,15 @@ private fun SaveHintCard(
 private fun buildReminderPreview(viewModel: BabyCareViewModel): String {
     val settings = viewModel.reminderSettings
     return buildString {
-        append("记录会先保存到本地。")
         if (settings.recheckReminderEnabled) {
-            append(" 已开启复测提醒，预计 ")
+            append("复测 ")
             append(settings.defaultRecheckAfterMinutes)
-            append(" 分钟后提醒复测体温。")
+            append(" 分钟后提醒")
         } else {
-            append(" 当前复测提醒已关闭。")
+            append("复测提醒已关闭")
         }
         if (settings.medicineReminderEnabled) {
-            append(" 同时会创建一次后续观察提醒。")
+            append("，并保留给药观察提醒")
         }
     }
 }

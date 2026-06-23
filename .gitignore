@@ -19,3 +19,7 @@ Thumbs.db
 # Generated
 app/release/
 app/debug/
+
+# Signing helper files
+app/signing/*.pem
+app/signing/*-key.pem
