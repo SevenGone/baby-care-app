@@ -29,11 +29,17 @@ jobs:
         with:
           gradle-version: 8.7
 
-      - name: Build release APK
-        run: gradle assembleRelease
+      - name: Build debug and release APK
+        run: gradle assembleDebug assembleRelease
 
-      - name: Upload APK artifact
+      - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: baby-care-release-apk
           path: app/build/outputs/apk/release/*.apk
+
+      - name: Upload restore debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: baby-care-restore-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
